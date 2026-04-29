@@ -1,0 +1,4 @@
+chat_model_name: deepseek-chat
+chat_model_base_url: https://api.deepseek.com/v1
+
+embedding_model_name: text-embedding-v4
