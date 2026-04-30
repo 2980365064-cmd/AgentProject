@@ -16,7 +16,11 @@ class BaseModelFactory(ABC):
 #聊天模型工厂
 class ChatModelFactory(BaseModelFactory):
     def generator(self) ->Optional[Embeddings|BaseChatModel]:
-        return ChatOpenAI(model=agent_conf["chat_model_name"])
+        return ChatOpenAI(
+            model=agent_conf["chat_model_name"],
+            base_url=agent_conf["chat_model_base_url"],
+            api_key=agent_conf["chat_model_api_key"]
+        )
 
 
 #嵌入模型工厂

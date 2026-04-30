@@ -33,7 +33,7 @@ def listdir_with_allowed_types(file_path:str,allowed_types:tuple[str]): #返回�
     files=[]
     if not os.path.isdir(file_path):
         logger.error(f"{file_path}不是文件夹")
-        return allowed_types
+        return files
     for f in os.listdir(file_path):
         if f.endswith(allowed_types):
             files.append(os.path.join(file_path,f))
@@ -44,4 +44,14 @@ def pdf_loader(file_path:str,password:str=None) ->list[Document]:
     return PyPDFLoader(file_path,password).load()
 
 def text_loader(file_path:str) ->list[Document]:
-    return TextLoader(file_path).load()
+    try:
+        return TextLoader(file_path, encoding='utf-8').load()
+    except UnicodeDecodeError:
+        try:
+            return TextLoader(file_path, encoding='gbk').load()
+        except Exception as e:
+            logger.error(f"文本文件{file_path}编码解析失败,{str(e)}")
+            return []
+    except Exception as e:
+        logger.error(f"文本文件{file_path}加载失败,{str(e)}")
+        return []

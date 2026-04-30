@@ -1,4 +1,6 @@
 chat_model_name: deepseek-chat
 chat_model_base_url: https://api.deepseek.com/v1
+chat_model_api_key: ${DEEPSEEK_API_KEY}
 
+external_data_path: data/external/records.csv
 embedding_model_name: text-embedding-v4
