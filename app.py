@@ -1,5 +1,6 @@
 import time
 import os
+import uuid
 import streamlit as st
 
 # 调试：打印环境变量状态（可选，确认后删除）
@@ -8,6 +9,7 @@ if "DEEPSEEK_API_KEY" not in os.environ:
     st.stop()
 
 from agent.react_agent import ReactAgent
+from utils.redis_chat_history import clear_session
 from utils.ui_styles import init_page_styles, render_message_bubble
 
 
@@ -21,8 +23,20 @@ st.divider()
 if "agent" not in st.session_state:
     st.session_state["agent"] = ReactAgent()
 
+if "session_id" not in st.session_state:
+    st.session_state["session_id"] = str(uuid.uuid4())
+
 if "message" not in st.session_state:
     st.session_state["message"] = []
+
+with st.sidebar:
+    st.caption("当前会话 ID（Redis 键）")
+    st.code(st.session_state["session_id"], language=None)
+    if st.button("开启新会话", help="清空本地展示与 Redis 中该会话的历史"):
+        clear_session(st.session_state["session_id"])
+        st.session_state["session_id"] = str(uuid.uuid4())
+        st.session_state["message"] = []
+        st.rerun()
 
 # ==================== 消息回放 ====================
 for message in st.session_state["message"]:
@@ -38,7 +52,9 @@ if prompt:
 
     response_messages = []
     with st.spinner("智能客服思考中..."):
-        res_stream = st.session_state["agent"].execute_stream(prompt)
+        res_stream = st.session_state["agent"].execute_stream(
+            prompt, st.session_state["session_id"]
+        )
 
         def capture(generator, cache_list):
             """把流式结果同时用于"展示"和"缓存"。"""

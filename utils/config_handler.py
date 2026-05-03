@@ -18,6 +18,11 @@ def load_prompts_config(config_path:str=get_abs_path("config/prompts.yaml"),enco
    with open(config_path,"r",encoding=encoding) as f:
        return yaml.load(f,Loader=yaml.FullLoader)
 
+def load_redis_config(config_path: str = get_abs_path("config/redis.yaml"), encoding="utf-8"):
+    with open(config_path, "r", encoding=encoding) as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
+
+
 def load_agent_config(config_path:str=get_abs_path("config/agent.yaml"),encoding="utf-8"):
    with open(config_path,"r",encoding=encoding) as f:
        content = f.read()
@@ -38,6 +43,5 @@ rag_conf=load_rag_config()
 chroma_conf=load_chroma_config()
 prompts_conf=load_prompts_config()
 agent_conf=load_agent_config()
+redis_conf=load_redis_config()
 
-if __name__ == '__main__':
-   print( agent_conf["chat_model_name"])

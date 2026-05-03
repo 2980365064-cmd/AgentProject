@@ -1,7 +1,5 @@
 import os
 import random
-from datetime import datetime
-
 from langchain_core.tools import tool
 from rag.rag_service import RagSummarizationService
 from utils.config_handler import agent_conf
@@ -13,6 +11,16 @@ rag=RagSummarizationService()
 @tool(description="从检索服务中检索参考资料")
 def rag_summarize(query:str) ->str:
     return rag.rag_summarize( query)
+
+@tool(description="推荐医院")
+def recommend_hospital(location:str,department:str) ->str:
+    """
+        当需要为患者推荐附近医院时调用此工具。
+        参数:
+        - location: 患者所在的地理位置（如：北京市朝阳区、山东省泰安市等）。
+        - department: 根据患者症状推断出的就诊科室（如：消化内科、发热门诊等）。
+        """
+    return f"推荐医院：{location}的{department}科室"
 
 @tool(description="天气服务")
 def get_weather(location:str) ->str:
@@ -29,6 +37,7 @@ def get_user_id() -> str:
 @tool(description="获取当前月份")
 def get_current_month() -> str:
     return "2025-08"
+
 
 #生成外部数据
 def generate_external_data(user_id:str,month:str) -> str:
