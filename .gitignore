@@ -1,0 +1,18 @@
+# Python 虚拟环境
+.venv/
+venv/
+env/
+
+# 日志和缓存
+logs/
+__pycache__/
+*.pyc
+
+# 向量数据库及本地数据
+chroma_db/
+*/chroma_db/
+*.sqlite3
+
+# IDE 配置文件
+.idea/
+.vscode/

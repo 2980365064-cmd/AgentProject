@@ -1,0 +1,11 @@
+main_chat_model_name: deepseek-chat
+main_chat_model_base_url: https://api.deepseek.com/v1
+main_chat_model_api_key: ${DEEPSEEK_API_KEY}
+
+backup_chat_model_name: deepseek-v4-flash
+backup_chat_model_base_url: https://api.deepseek.com/v1
+backup_chat_model_api_key: ${DEEPSEEK_API_KEY}
+
+external_data_path: data/external/records.csv
+embedding_model_name: text-embedding-v4
+embedding_model_api_key: ${DASHSCOPE_API_KEY}
