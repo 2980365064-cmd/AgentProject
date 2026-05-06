@@ -58,17 +58,35 @@ def get_messages(session_id: str) -> list[dict[str, str]]:
             return []
         data = json.loads(raw)
 
-        #安全检查，防止数据格式错误
-        if not isinstance(data, list):
+        # 新格式：{"title": "...", "messages": [...]}；旧格式：直接为消息数组
+        if isinstance(data, dict):
+            msg_list = data.get("messages")
+            if not isinstance(msg_list, list):
+                return []
+        elif isinstance(data, list):
+            msg_list = data
+        else:
             return []
+
         out: list[dict[str, str]] = []
-        for item in data:
+        for item in msg_list:
             if isinstance(item, dict) and item.get("role") in ("user", "assistant") and "content" in item:
                 out.append({"role": item["role"], "content": str(item["content"])})
         return out
     except redis.RedisError as e:
         logger.error(f"Redis 读取会话历史失败 session_id={session_id}: {e}")
         return []
+
+
+def session_exists(session_id: str) -> bool:
+    """Redis 中是否存在该会话 key（含仅有标题、尚无消息的新会话）"""
+    if not session_id:
+        return False
+    try:
+        return bool(get_redis_client().exists(_session_key(session_id)))
+    except redis.RedisError as e:
+        logger.error(f"Redis 检查会话是否存在失败 session_id={session_id}: {e}")
+        return False
 
 
 def save_messages(session_id: str, messages: list[dict[str, str]]) -> None:
@@ -79,7 +97,25 @@ def save_messages(session_id: str, messages: list[dict[str, str]]) -> None:
         trimmed = _trim(messages)
         ttl = int(redis_conf.get("ttl_seconds", 604800))
         key = _session_key(session_id)
-        payload = json.dumps(trimmed, ensure_ascii=False)
+        
+        # ✅ 检查是否是新格式（包含title的对象）
+        raw = r.get(key)
+        if raw:
+            try:
+                existing_data = json.loads(raw)
+                if isinstance(existing_data, dict):
+                    # 新格式：更新 messages 字段，保留 title
+                    existing_data["messages"] = trimmed
+                    payload = json.dumps(existing_data, ensure_ascii=False)
+                else:
+                    # 旧格式：直接是数组
+                    payload = json.dumps(trimmed, ensure_ascii=False)
+            except:
+                payload = json.dumps(trimmed, ensure_ascii=False)
+        else:
+            # 新会话：直接存储数组
+            payload = json.dumps(trimmed, ensure_ascii=False)
+        
         if ttl > 0:
             r.setex(key, ttl, payload)
         else:
