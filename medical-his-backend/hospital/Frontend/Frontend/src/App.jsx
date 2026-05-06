@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
@@ -29,7 +29,6 @@ const ProtectedRoute = ({ children }) => {
   const user = getStoredUser();
   
   if (!user) {
-    // 未登录，重定向到登录页
     return <Navigate to="/login" replace />;
   }
   
@@ -44,7 +43,6 @@ const RoleGuard = ({ allowedRoles, children }) => {
   const role = user?.role ?? user?.userRole ?? "";
   
   if (!allowedRoles.includes(role.toUpperCase())) {
-    // 无权限，重定向到对应的首页
     const redirectPath = isPatientRole(role) ? "/dashboard" : "/dashboard";
     return <Navigate to={redirectPath} replace />;
   }
@@ -59,7 +57,6 @@ const HospitalLayout = () => {
 
   const [active, setActive] = useState(() => getDefaultActiveId(role));
 
-  // ✅ 监听用户变化，动态更新角色和菜单
   useEffect(() => {
     const handleStorageChange = () => {
       const newRole = readUserRole();
@@ -70,8 +67,6 @@ const HospitalLayout = () => {
     };
 
     window.addEventListener('storage', handleStorageChange);
-    
-    // 定期检查用户状态（防止手动修改localStorage）
     const interval = setInterval(handleStorageChange, 2000);
     
     return () => {
@@ -79,15 +74,6 @@ const HospitalLayout = () => {
       clearInterval(interval);
     };
   }, [role]);
-
-  // ✅ 验证当前active页面是否属于当前角色
-  useEffect(() => {
-    const currentNavItem = navItems.find(n => n.id === active);
-    if (!currentNavItem && active !== root.id) {
-      // 如果当前页面不在用户的菜单中，跳转到默认页面
-      setActive(getDefaultActiveId(role));
-    }
-  }, [active, navItems, role, root.id]);
 
   const ActivePage =
     PAGES[active] ||
@@ -158,14 +144,9 @@ const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 根路径重定向 */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-        
-        {/* 公开路由：登录和注册 */}
         <Route path="/login" element={<Login />} />
         <Route path="/registration" element={<Register />} />
-        
-        {/* 受保护路由：需要登录 */}
         <Route 
           path="/dashboard" 
           element={
@@ -174,8 +155,6 @@ const App = () => {
             </ProtectedRoute>
           } 
         />
-        
-        {/* 捕获所有其他路由，重定向到登录页 */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

@@ -13,6 +13,7 @@ import ReportsPage from "./src/pages/ReportsPage";
 import PatientFreeDoctorsPage from "./src/pages/PatientFreeDoctorsPage";
 import PatientAdmissionRecordsPage from "./src/pages/PatientAdmissionRecordsPage";
 import PatientMyCasesPage from "./src/pages/PatientMyCasesPage";
+import AIAssistantPage from "./src/pages/AIAssistantPage.jsx";
 
 /** 管理员侧栏（与原先一致） */
 export const ADMIN_NAV_ITEMS = [
@@ -28,6 +29,7 @@ export const ADMIN_NAV_ITEMS = [
   { id: "manageDoctors", label: "医生管理", icon: "manageDoctors" },
   { id: "appointments", label: "预约挂号", icon: "appointments" },
   { id: "reports", label: "统计报表", icon: "reports" },
+  { id: "aiAssistant", label: "智能问答助手", icon: "aiAssistant" },
 ];
 
 /** 兼容旧引用：等同于管理员菜单 */
@@ -41,6 +43,7 @@ export const PATIENT_NAV_ITEMS = [
   { id: PATIENT_ROOT_ID, label: "查看指定时间段空闲医生", icon: "patientCalendar" },
   { id: "patientAdmissionRecords", label: "查看住院记录", icon: "patientBed" },
   { id: "patientMyCases", label: "我的病例", icon: "patientCase" },
+  { id: "aiAssistant", label: "智能问答助手", icon: "aiAssistant" },
 ];
 
 export function isPatientRole(role) {
@@ -79,4 +82,5 @@ export const PAGES = {
   patientFreeDoctors: PatientFreeDoctorsPage,
   patientAdmissionRecords: PatientAdmissionRecordsPage,
   patientMyCases: PatientMyCasesPage,
+  aiAssistant: AIAssistantPage,
 };

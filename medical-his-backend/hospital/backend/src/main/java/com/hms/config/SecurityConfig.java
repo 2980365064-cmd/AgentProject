@@ -43,11 +43,18 @@ public class SecurityConfig {
                 // Swagger文档公开
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 
+                // WebSocket 公开（可以在握手时验证 JWT）
+                .requestMatchers("/ws/**").permitAll()
+                
                 // ADMIN接口需要认证
                 .requestMatchers("/api/v1/admin/**").authenticated()
                 
                 // PATIENT接口需要认证
                 .requestMatchers("/api/v1/patient/**").authenticated()
+                
+                // AI助手接口需要认证（支持两种路径）
+                .requestMatchers("/api/v1/ai/**").authenticated()
+                .requestMatchers("/api/v1/ai-assistant/**").authenticated()
                 
                 // 其他所有请求需要认证
                 .anyRequest().authenticated()
