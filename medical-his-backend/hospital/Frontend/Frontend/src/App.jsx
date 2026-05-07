@@ -11,7 +11,6 @@ import {
   getDefaultActiveId,
   getDashboardRoot,
   PATIENT_ROOT_ID,
-  isPatientRole,
 } from "../constants";
 import { getStoredUser } from "./services/apiClient";
 import { ToastContainer } from "react-toastify";
@@ -31,21 +30,6 @@ const ProtectedRoute = ({ children }) => {
   if (!user) {
     console.log('🔒 ProtectedRoute: 用户未登录，重定向到登录页');
     return <Navigate to="/login" replace />;
-  }
-  
-  return children;
-};
-
-/**
- * 角色守卫组件：检查用户是否有权限访问
- */
-const RoleGuard = ({ allowedRoles, children }) => {
-  const user = getStoredUser();
-  const role = user?.role ?? user?.userRole ?? "";
-  
-  if (!allowedRoles.includes(role.toUpperCase())) {
-    const redirectPath = isPatientRole(role) ? "/dashboard" : "/dashboard";
-    return <Navigate to={redirectPath} replace />;
   }
   
   return children;

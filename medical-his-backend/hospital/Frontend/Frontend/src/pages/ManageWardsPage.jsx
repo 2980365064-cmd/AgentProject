@@ -11,8 +11,6 @@ import {
   zhWardFloor,
 } from "../utils/backendDisplayZh";
 
-const FLOOR_OPTIONS = WARD_FLOOR_OPTIONS;
-
 const initialForm = {
   id: null,
   name: "",
@@ -178,8 +176,8 @@ const ManageWardsPage = () => {
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>所在楼层</label>
               <Select
-                options={FLOOR_OPTIONS}
-                value={FLOOR_OPTIONS.find(o => o.value === form.floor)}
+                options={WARD_FLOOR_OPTIONS}
+                value={WARD_FLOOR_OPTIONS.find(o => o.value === form.floor)}
                 onChange={(opt) => handleChange("floor", opt ? opt.value : "")}
                 placeholder="请选择楼层"
                 styles={customSelectStyles}
