@@ -37,6 +37,37 @@ export function clearStoredUser() {
 }
 
 /**
+ * 完整的登出流程：清除存储 + 关闭 WebSocket 连接
+ */
+export async function logout() {
+  console.log('🚪 开始执行登出流程...');
+  
+  try {
+    // 1️⃣ 关闭 WebSocket 连接（如果存在）
+    const { aiChatWS } = await import('./aiChatWebSocket');
+    if (aiChatWS) {
+      console.log('🔌 关闭 WebSocket 连接...');
+      aiChatWS.disconnect();
+      console.log('✅ WebSocket 连接已关闭');
+    }
+    
+    // ⚠️ 不清除 chatSessionId，因为会话历史是服务器端存储的，与用户账号绑定
+    // localStorage.removeItem('chatSessionId');
+    console.log('ℹ️ 保留 chatSessionId（会话历史与用户账号绑定）');
+    
+    // 2️⃣ 清除用户数据
+    clearStoredUser();
+    console.log('🗑️ 已清除用户数据');
+    
+    console.log('✅ 登出流程完成');
+  } catch (error) {
+    console.error('❌ 登出流程出错:', error);
+    // 即使出错也要确保清除用户数据
+    clearStoredUser();
+  }
+}
+
+/**
  * 根据登录/注册接口的统一响应结构，把用户信息写入 localStorage。
  * 支持：{ status, data: { ... } } 或 { status, token, mail, role, ... }
  */

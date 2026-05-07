@@ -3,6 +3,7 @@ package com.hms.config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hms.service.AiChatService;
+import com.hms.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -11,6 +12,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,7 +35,21 @@ public class AiChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String sessionId = session.getId();
         sessions.put(sessionId, session);
-        log.info("✓ WebSocket 连接建立: {}", sessionId);
+        
+        // ✅ 从 session attributes 中获取用户信息（由握手拦截器设置）
+        Integer userId = (Integer) session.getAttributes().get("userId");
+        String userRole = (String) session.getAttributes().get("userRole");
+        String username = (String) session.getAttributes().get("username");
+        
+        log.info("╔════════════════════════════════════════╗");
+        log.info("║   WebSocket 连接建立成功              ║");
+        log.info("╠════════════════════════════════════════╣");
+        log.info("║ Session ID: {}", sessionId);
+        log.info("║ 用户名: {}", username);
+        log.info("║ 用户ID: {}", userId);
+        log.info("║ 用户角色: {}", userRole);
+        log.info("║ Attributes 全部内容: {}", session.getAttributes());
+        log.info("╚════════════════════════════════════════╝");
 
         // ✅ 使用 synchronized 确保线程安全，并增加重试机制
         new Thread(() -> {
@@ -106,27 +122,55 @@ public class AiChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleChatMessage(WebSocketSession session, JsonNode jsonNode) {
-        final String userIdStr = jsonNode.path("userId").asText("").trim();
-        final String userRole = jsonNode.path("userRole").asText("").trim();
+        String sessionId = session.getId();
+        
+        // ✅ 从 session attributes 中获取真实的用户信息（由握手拦截器设置）
+        Integer userId = (Integer) session.getAttributes().get("userId");
+        String userRole = (String) session.getAttributes().get("userRole");
+        String username = (String) session.getAttributes().get("username");
+        
+        log.info("╔════════════════════════════════════════╗");
+        log.info("║   收到聊天消息                        ║");
+        log.info("╠════════════════════════════════════════╣");
+        log.info("║ Session ID: {}", sessionId);
+        log.info("║ 从 JWT Token 解析的用户信息:");
+        log.info("║   - 用户名: {}", username);
+        log.info("║   - 用户ID (从 attributes 获取): {}", userId);
+        log.info("║   - 用户角色 (从 attributes 获取): {}", userRole);
+        log.info("║ 前端传递的消息内容:");
+        log.info("║   - message: {}", jsonNode.path("message").asText(""));
+        log.info("║   - sessionId: {}", jsonNode.path("sessionId").asText(""));
+        log.info("║   - userId (忽略): {}", jsonNode.path("userId").asText(""));
+        log.info("║   - userRole (忽略): {}", jsonNode.path("userRole").asText(""));
+        log.info("║ Attributes 全部内容: {}", session.getAttributes());
+        log.info("╚════════════════════════════════════════╝");
+        
+        if (userId == null || userRole == null) {
+            try {
+                sendMessage(session, Map.of(
+                    "type", "error",
+                    "message", "会话未认证，请重新连接"
+                ));
+                session.close(CloseStatus.NOT_ACCEPTABLE.withReason("未认证的会话"));
+            } catch (Exception e) {
+                log.error("发送错误消息失败", e);
+            }
+            return;
+        }
+        
         final String message = jsonNode.path("message").asText("");
         String sid = jsonNode.path("sessionId").asText("").trim();
+        
         if (sid.isEmpty() || "null".equalsIgnoreCase(sid) || "undefined".equalsIgnoreCase(sid)) {
             sid = "";
         }
-        final String sessionId = sid.isEmpty() ? null : sid;
+        final String finalSessionId = sid.isEmpty() ? null : sid;
 
-        log.info("处理聊天消息 - 用户: {}, 角色: {}, 会话: {}", userIdStr, userRole, sessionId);
+        log.info("→ 调用 AI 服务 - 用户ID: {}, 角色: {}, 会话: {}", userId, userRole, finalSessionId);
 
         // ✅ 异步处理聊天消息
         new Thread(() -> {
             try {
-                if (userIdStr.isEmpty() || userRole.isEmpty()) {
-                    sendMessage(session, Map.of(
-                        "type", "error",
-                        "message", "用户信息不完整，请重新登录后再试"
-                    ));
-                    return;
-                }
                 if (message.trim().isEmpty()) {
                     sendMessage(session, Map.of(
                         "type", "error",
@@ -134,21 +178,10 @@ public class AiChatWebSocketHandler extends TextWebSocketHandler {
                     ));
                     return;
                 }
-                if (sessionId == null) {
+                if (finalSessionId == null) {
                     sendMessage(session, Map.of(
                         "type", "error",
                         "message", "请先创建或选择一个会话后再发送"
-                    ));
-                    return;
-                }
-
-                final int userId;
-                try {
-                    userId = Integer.parseInt(userIdStr);
-                } catch (NumberFormatException e) {
-                    sendMessage(session, Map.of(
-                        "type", "error",
-                        "message", "用户身份无效，请重新登录"
                     ));
                     return;
                 }
@@ -162,27 +195,53 @@ public class AiChatWebSocketHandler extends TextWebSocketHandler {
                 // 2. 调用 AI（使用 /chat/messages：比 HttpClient 拉 SSE 更稳定）
                 com.hms.dto.request.AiChatRequest request = new com.hms.dto.request.AiChatRequest();
                 request.setMessage(message.trim());
-                request.setSessionId(sessionId);
+                request.setSessionId(finalSessionId);
+                Object jwtAttr = session.getAttributes().get("rawJwt");
+                if (jwtAttr instanceof String raw && !raw.isBlank()) {
+                    request.setBearerToken(raw);
+                }
 
-                var response = aiChatService.sendMessage(
+                log.info("✓ 准备调用 aiChatService.sendMessageStream(userId={}, userRole={})", userId, userRole);
+
+                var response = aiChatService.sendMessageStream(
                     userId,
                     userRole,
-                    request
+                    request,
+                    chunk -> {
+                        if (chunk == null || chunk.isEmpty() || !session.isOpen()) {
+                            return;
+                        }
+                        try {
+                            Map<String, Object> chunkMsg = new HashMap<>();
+                            chunkMsg.put("type", "chat_response");
+                            chunkMsg.put("chunk", chunk);
+                            chunkMsg.put("isChunk", true);
+                            chunkMsg.put("streamType", "chunk");
+                            chunkMsg.put("sessionId", finalSessionId != null ? finalSessionId : "");
+                            chunkMsg.put("timestamp", System.currentTimeMillis());
+                            chunkMsg.put("isComplete", false);
+                            chunkMsg.put("done", false);
+                            sendMessage(session, chunkMsg);
+                        } catch (Exception e) {
+                            log.error("推送流式片段失败", e);
+                        }
+                    }
                 );
 
-                // 3. 发送最终完成消息
+                // 3. 发送最终完成消息（与前端约定 isComplete/done 结束打字状态）
                 if ("success".equals(response.getStatus())) {
                     var data = (com.hms.dto.response.AiChatResponse) response.getData();
                     String reply = data.getAiMessage() != null ? data.getAiMessage() : "";
+                    String outSid = data.getSessionId() != null ? data.getSessionId() : finalSessionId;
 
-                    sendMessage(session, Map.of(
-                        "type", "chat_response",
-                        "aiMessage", reply,
-                        "sessionId", data.getSessionId(),
-                        "timestamp", data.getTimestamp(),
-                        "isComplete", true,
-                        "done", true
-                    ));
+                    Map<String, Object> doneMsg = new HashMap<>();
+                    doneMsg.put("type", "chat_response");
+                    doneMsg.put("aiMessage", reply);
+                    doneMsg.put("sessionId", outSid != null ? outSid : "");
+                    doneMsg.put("timestamp", data.getTimestamp());
+                    doneMsg.put("isComplete", true);
+                    doneMsg.put("done", true);
+                    sendMessage(session, doneMsg);
 
                     log.info("✓ AI 回复完成，总长度: {}", reply.length());
                 } else {

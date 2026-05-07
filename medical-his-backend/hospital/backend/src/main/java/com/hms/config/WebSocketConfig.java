@@ -12,14 +12,18 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final WebSocketHandler aiChatWebSocketHandler;
+    private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
 
-    public WebSocketConfig(WebSocketHandler aiChatWebSocketHandler) {
+    public WebSocketConfig(WebSocketHandler aiChatWebSocketHandler, 
+                          JwtHandshakeInterceptor jwtHandshakeInterceptor) {
         this.aiChatWebSocketHandler = aiChatWebSocketHandler;
+        this.jwtHandshakeInterceptor = jwtHandshakeInterceptor;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(aiChatWebSocketHandler, "/ws/ai-chat")
+                .addInterceptors(jwtHandshakeInterceptor)
                 .setAllowedOrigins("http://localhost:5173");
     }
 }

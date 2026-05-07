@@ -5,25 +5,12 @@ import { FiEdit, FiTrash2 } from "react-icons/fi";
 import { doctorService } from "../services/doctorService";
 import { wardService } from "../services/wardService";
 import { toast } from "react-toastify";
-
-// Hardcoded Specialisation Options formatted for Select
-const SPECIALISATION_OPTIONS = [
-  { value: "Cardiology", label: "心血管内科" },
-  { value: "Neurology", label: "神经内科" },
-  { value: "Orthopaedics", label: "骨科" },
-  { value: "General Surgery", label: "普通外科" },
-  { value: "Pediatrics", label: "儿科" },
-  { value: "Internal Medicine", label: "内科" }
-];
-
-// Hardcoded Team Options formatted for Select
-const TEAM_OPTIONS = [
-  { value: "Medical Team A", label: "内科医疗组 A" },
-  { value: "Surgical Team B", label: "外科医疗组 B" },
-  { value: "Emergency Response Team", label: "急诊抢救组" },
-  { value: "Pediatric Specialists", label: "儿科专家组" },
-  { value: "Cardiology Unit", label: "心内科单元" }
-];
+import {
+  SPECIALISATION_OPTIONS,
+  MEDICAL_TEAM_OPTIONS as TEAM_OPTIONS,
+  zhSpecialisation,
+  zhMedicalTeam,
+} from "../utils/backendDisplayZh";
 
 const initialForm = {
   name: "",
@@ -236,9 +223,9 @@ const ManageDoctorsPage = () => {
               {filteredDoctors.map((d, index) => (
                 <tr key={d.mobile} style={{ background: index % 2 === 0 ? "#f9fafb" : "#fff", textAlign: "center" }}>
                   <td style={{ padding: 10 }}>{d.name}</td>
-                  <td>{d.specialisation}</td>
+                  <td>{zhSpecialisation(d.specialisation)}</td>
                   <td>{d.ward}</td>
-                  <td>{d.team}</td>
+                  <td>{zhMedicalTeam(d.team)}</td>
                   <td>{d.mobile}</td>
                   <td style={{ display: "flex", justifyContent: "center", gap: 12, padding: 10 }}>
                     <FiEdit size={20} color="#f59e0b" style={{ cursor: "pointer" }} onClick={() => startEdit(d)} />

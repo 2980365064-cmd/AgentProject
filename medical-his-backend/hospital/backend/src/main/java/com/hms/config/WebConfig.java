@@ -16,9 +16,8 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(roleInterceptor)
                 .addPathPatterns("/api/v1/admin/**")
-                .excludePathPatterns(
-                        "/api/v1/auth/**"
-                );
+                .addPathPatterns("/api/v1/ai-assistant/**")
+                .addPathPatterns("/api/v1/patient/**");
     }
 
     @Override

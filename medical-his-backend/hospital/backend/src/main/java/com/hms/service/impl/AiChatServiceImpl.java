@@ -5,27 +5,55 @@ import com.hms.dto.AiMessageDTO;
 import com.hms.dto.request.AiChatRequest;
 import com.hms.dto.request.AiSessionCreateRequest;
 import com.hms.dto.response.AiChatResponse;
+import com.hms.entity.Doctor;
+import com.hms.entity.Patient;
 import com.hms.service.AiChatService;
+import com.hms.service.DoctorService;
+import com.hms.service.PatientService;
 import com.hms.util.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 @Service
 public class AiChatServiceImpl implements AiChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
+    @Autowired
+    private PatientService patientService;
+    @Autowired
+    private DoctorService doctorService;
+    /**
+     * 与前端助手形态对应，供 FastAPI / LangGraph 侧按档案切换工具集合。
+     * health：患者「健康小助手」；management：医护「管理小助手」
+     */
+    public static final String ASSISTANT_PROFILE_HEALTH = "health";
+    public static final String ASSISTANT_PROFILE_MANAGEMENT = "management";
 
     @Value("${ai.fastapi.url:http://localhost:8000}")
     private String fastApiUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
+
+    /** 由登录角色决定助手档案（以服务端 JWT 为准，防止前端伪造） */
+    static String assistantProfileForRole(String userRole) {
+        if (userRole == null || userRole.isBlank()) {
+            return ASSISTANT_PROFILE_MANAGEMENT;
+        }
+        if ("PATIENT".equalsIgnoreCase(userRole.trim())) {
+            return ASSISTANT_PROFILE_HEALTH;
+        }
+        return ASSISTANT_PROFILE_MANAGEMENT;
+    }
 
     @Override
     public Response<?> sendMessage(Integer userId, String userRole, AiChatRequest request) {
@@ -40,13 +68,19 @@ public class AiChatServiceImpl implements AiChatService {
             
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("user_input", request.getMessage());
-            
+            requestBody.put("user_id", userId);
+            requestBody.put("user_role", userRole);
+            requestBody.put("assistant_profile", assistantProfileForRole(userRole));
+
             if (request.getSessionId() != null && !request.getSessionId().isEmpty()) {
                 requestBody.put("session_id", request.getSessionId());
                 log.info("使用现有会话: {}", request.getSessionId());
             } else {
                 requestBody.put("session_id", "");
                 log.info("创建新会话（session_id为空字符串）");
+            }
+            if (request.getBearerToken() != null && !request.getBearerToken().isBlank()) {
+                requestBody.put("bearer_token", request.getBearerToken());
             }
 
             log.info("发送给Python的请求Body: {}", requestBody);
@@ -107,13 +141,18 @@ public class AiChatServiceImpl implements AiChatService {
     @Override
     public Response<?> getSessionList(Integer userId, String userRole) {
         try {
+            String assistantProfile = assistantProfileForRole(userRole);
+
             String url = UriComponentsBuilder.fromUriString(fastApiUrl + "/api/v1/sessions")
                     .queryParam("user_id", userId)
                     .queryParam("user_role", userRole)
+                    .queryParam("assistant_profile", assistantProfile)  // ✅ 添加 assistant_profile 参数
                     .build()
                     .toUriString();
 
             log.info("获取会话列表URL: {}", url);
+            log.info("用户ID: {}, 角色: {}, 助手档案: {}", userId, userRole, assistantProfile);
+
             HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
             
@@ -155,13 +194,18 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         try {
+            String assistantProfile = assistantProfileForRole(userRole);
+
             String url = UriComponentsBuilder.fromUriString(fastApiUrl + "/api/v1/sessions/{sessionId}/history")
                     .queryParam("user_id", userId)
                     .queryParam("user_role", userRole)
+                    .queryParam("assistant_profile", assistantProfile)  // ✅ 添加 assistant_profile 参数
                     .buildAndExpand(sessionId)
                     .toUriString();
 
             log.info("获取会话历史URL: {}", url);
+            log.info("用户ID: {}, 角色: {}, 助手档案: {}, 会话ID: {}", userId, userRole, assistantProfile, sessionId);
+
             HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
             
@@ -247,6 +291,9 @@ public class AiChatServiceImpl implements AiChatService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("user_id", userId);
+            requestBody.put("user_role", userRole);
+            requestBody.put("assistant_profile", assistantProfileForRole(userRole));
             if (createRequest != null) {
                 String title = createRequest.resolveTitle();
                 if (title != null && !title.isEmpty()) {
@@ -254,9 +301,7 @@ public class AiChatServiceImpl implements AiChatService {
                 }
             }
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(
-                    requestBody.isEmpty() ? new HashMap<>() : requestBody,
-                    headers);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
             ResponseEntity<Map> response = restTemplate.exchange(
                     url, HttpMethod.POST, entity, Map.class);
@@ -348,6 +393,23 @@ public class AiChatServiceImpl implements AiChatService {
         }
     }
 
+    /**
+     * POST 流式 SSE；禁止自动跟随重定向，以免 301/302 被改成 GET 导致请求体丢失（FastAPI 会报 body Field required）。
+     */
+    private java.net.http.HttpResponse<java.util.stream.Stream<String>> postChatStreamSse(
+            java.net.http.HttpClient httpClient,
+            java.net.URI uri,
+            byte[] jsonUtf8) throws java.io.IOException, InterruptedException {
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                .uri(uri)
+                .timeout(Duration.ofMinutes(5))
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .header("Accept", "text/event-stream")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(jsonUtf8))
+                .build();
+        return httpClient.send(req, java.net.http.HttpResponse.BodyHandlers.ofLines());
+    }
+
     @Override
     public Response<?> sendMessageStream(Integer userId, String userRole, AiChatRequest request, java.util.function.Consumer<String> chunkCallback) {
         try {
@@ -362,13 +424,19 @@ public class AiChatServiceImpl implements AiChatService {
             // 构建请求体
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("user_input", request.getMessage());
-            
+            requestBody.put("user_id", userId);
+            requestBody.put("user_role", userRole);
+            requestBody.put("assistant_profile", assistantProfileForRole(userRole));
+
             if (request.getSessionId() != null && !request.getSessionId().isEmpty()) {
                 requestBody.put("session_id", request.getSessionId());
                 log.info("使用现有会话: {}", request.getSessionId());
             } else {
                 requestBody.put("session_id", "");
                 log.info("创建新会话（session_id为空字符串）");
+            }
+            if (request.getBearerToken() != null && !request.getBearerToken().isBlank()) {
+                requestBody.put("bearer_token", request.getBearerToken());
             }
 
             HttpHeaders headers = new HttpHeaders();
@@ -384,28 +452,35 @@ public class AiChatServiceImpl implements AiChatService {
             // ✅ 方案：使用 RestTemplate 执行流式请求
             // 注意：Spring 的 RestTemplate 不直接支持 SSE，需要使用其他方式
             
-            // 使用 Java HttpClient 处理 SSE
-            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder().build();
-            
-            java.net.URI uri = java.net.URI.create(url);
-            String jsonBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(requestBody);
-            
-            java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
-                    .uri(uri)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "text/event-stream")
-                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonBody))
+            com.fasterxml.jackson.databind.ObjectMapper streamMapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            streamMapper.configure(com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
+            String jsonBody = streamMapper.writeValueAsString(requestBody);
+            byte[] jsonBytes = jsonBody.getBytes(StandardCharsets.UTF_8);
+
+            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
+                    .version(java.net.http.HttpClient.Version.HTTP_1_1)
+                    .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
                     .build();
-            
-            // 处理 SSE 响应
-            java.util.concurrent.atomic.AtomicReference<String> accumulatedData = new java.util.concurrent.atomic.AtomicReference<>("");
-            
-            java.net.http.HttpResponse<java.util.stream.Stream<String>> response = httpClient.send(
-                httpRequest,
-                java.net.http.HttpResponse.BodyHandlers.ofLines()
-            );
-            
-            if (response.statusCode() == 200) {
+
+            java.net.URI uri = java.net.URI.create(url);
+            java.net.http.HttpResponse<java.util.stream.Stream<String>> response = postChatStreamSse(httpClient, uri, jsonBytes);
+
+            int status = response.statusCode();
+            if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+                String location = response.headers().firstValue("Location").orElse(null);
+                try (java.util.stream.Stream<String> drain = response.body()) {
+                    drain.forEach(line -> { });
+                }
+                if (location != null && !location.isBlank()) {
+                    java.net.URI next = uri.resolve(location);
+                    log.warn("流式接口返回 {}，Location: {}，使用原 POST 正文重试（避免自动重定向丢 body）", status, next);
+                    response = postChatStreamSse(httpClient, next, jsonBytes);
+                    status = response.statusCode();
+                }
+            }
+
+            if (status == 200) {
                 java.util.stream.Stream<String> lines = response.body();
                 Iterator<String> lineIterator = lines.iterator();
                 
@@ -467,8 +542,17 @@ public class AiChatServiceImpl implements AiChatService {
                 return new Response<>("success", "AI回复成功", aiResponse);
                 
             } else {
-                log.error("✗ HTTP请求失败，状态码: {}", response.statusCode());
-                return new Response<>("error", "AI服务调用失败（HTTP " + response.statusCode() + "）", null);
+                String errBody = "";
+                try {
+                    errBody = response.body() != null
+                            ? String.join("\n", response.body().toList())
+                            : "";
+                } catch (Exception ignored) {
+                    // ignore
+                }
+                log.error("✗ HTTP请求失败，状态码: {}，响应体: {}", status,
+                        errBody.length() > 800 ? errBody.substring(0, 800) + "…" : errBody);
+                return new Response<>("error", "AI服务调用失败（HTTP " + status + "）", null);
             }
             
         } catch (Exception e) {
@@ -476,6 +560,21 @@ public class AiChatServiceImpl implements AiChatService {
             return new Response<>("error", "AI服务异常: " + e.getMessage(), null);
         }
     }
+
+    @Override
+    public Response<?> searchD(String name) {
+        //从 数据库中获取医生信息
+        List<Doctor> doctorList = doctorService.findByName(name);
+        return new Response<>("success", "查询成功", doctorList);
+    }
+
+    @Override
+    public Response<?> searchP(String name) {
+        //从 数据库中获取患者信息
+        List<Patient> patientList = patientService.findByName(name);
+        return new Response<>("success", "查询成功", patientList);
+    }
+
 
     /** FastAPI 的 code 在 JSON 中常为 Integer，部分序列化场景为 Long */
     private static int pythonApiCode(Map<String, Object> body) {

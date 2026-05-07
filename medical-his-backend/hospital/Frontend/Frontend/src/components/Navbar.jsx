@@ -1,51 +1,66 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "./Icon";
-import { USER_DATA_KEY, getStoredUser } from "../services/apiClient";
+import { USER_DATA_KEY, getStoredUser, logout } from "../services/apiClient";
+import { isPatientRole } from "../../constants";
+import { toast } from "react-toastify";
 
 const Navbar = () => {
   const navigate = useNavigate();
   const [userInfo, setUserInfo] = useState({ name: "", role: "" });
 
   useEffect(() => {
-    loadUserInfo();
-    
-    // 监听storage变化，当用户信息更新时同步更新显示
-    const handleStorageChange = () => {
-      loadUserInfo();
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    const user = getStoredUser();
+    if (user) {
+      setUserInfo({
+        name: user.name || user.username || user.email || "用户",
+        role: user.role || user.userRole || "",
+      });
+    }
   }, []);
 
-  const loadUserInfo = () => {
-    const userData = getStoredUser();
-    
-    console.log('📋 Navbar - 读取到的用户数据:', userData);
-    
-    if (userData) {
-      const name = userData.name || userData.userName || userData.username || "未设置姓名";
-      const role = userData.role || userData.userRole || "";
-      
-      console.log('📋 Navbar - 解析后的信息:', { name, role });
-      
-      setUserInfo({
-        name: name,
-        role: role
-      });
-    } else {
-      console.warn('⚠️ Navbar - 未找到用户数据');
-      setUserInfo({ name: "未登录", role: "" });
-    }
-  };
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const user = getStoredUser();
+      if (!user) {
+        console.log('🔌 检测到用户已登出，跳转到登录页');
+        navigate("/login", { replace: true });
+      } else {
+        setUserInfo({
+          name: user.name || user.username || user.email || "用户",
+          role: user.role || user.userRole || "",
+        });
+      }
+    };
 
-  const handleLogout = () => {
-    localStorage.removeItem(USER_DATA_KEY);
-    navigate("/login");
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    console.log('🚪 用户点击退出登录');
+    
+    try {
+      // ✅ 使用统一的登出函数，确保彻底清理
+      await logout();
+      
+      console.log('✅ 登出完成，立即跳转到登录页');
+      
+      // ✅ 使用 replace 强制替换当前路由，避免回退问题
+      navigate("/login", { replace: true });
+      
+      // 显示成功提示（不依赖 onClose）
+      toast.success('已安全退出登录', { 
+        autoClose: 2000,
+        position: "top-center"
+      });
+      
+    } catch (error) {
+      console.error('❌ 登出失败:', error);
+      // 即使出错也强制跳转
+      navigate("/login", { replace: true });
+      toast.error('登出时出现错误', { autoClose: 2000 });
+    }
   };
 
   // 角色映射：将后端返回的角色转换为中文显示
@@ -87,43 +102,30 @@ const Navbar = () => {
 
   const roleDisplay = getRoleDisplay(userInfo.role);
   const roleColor = getRoleColor(userInfo.role);
+  const navTitle = isPatientRole(userInfo.role) ? "🏥 仁爱医院" : "🏥 仁爱医院管理系统";
 
   return (
     <header
       style={{
-        background: "linear-gradient(90deg, #1e3a8a 0%, #1e40af 100%)",
-        color: "#fff",
+        background: "linear-gradient(135deg, #1e40af, #2563eb)",
+        padding: "14px 32px",
         display: "flex",
-        alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 28px",
-        height: 56,
-        flexShrink: 0,
-        boxShadow: "0 2px 12px rgba(30,58,138,.4)",
-        zIndex: 10,
+        alignItems: "center",
+        boxShadow: "0 4px 12px rgba(30,64,175,.25)",
       }}
     >
-      {/* Logo + Title */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
+      {/* Logo / Title */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span
           style={{
-            background: "#fff",
-            color: "#1e40af",
-            fontWeight: 900,
-            fontSize: 15,
-            width: 34,
-            height: 34,
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            letterSpacing: "-1px",
+            fontSize: 22,
+            fontWeight: 800,
+            color: "#fff",
+            letterSpacing: ".5px",
           }}
         >
-          H
-        </div>
-        <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: ".4px" }}>
-          医院管理系统
+          {navTitle}
         </span>
       </div>
 

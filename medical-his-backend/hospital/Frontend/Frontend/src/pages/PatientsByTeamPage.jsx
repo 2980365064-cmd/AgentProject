@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Badge, Table } from "../components/UI";
 import { patientService } from "../services/patientService";
+import { zhMedicalTeam } from "../utils/backendDisplayZh";
 
 const PatientsByTeamPage = () => {
   const [patients, setPatients] = useState([]);
@@ -29,7 +30,7 @@ const PatientsByTeamPage = () => {
     return filtered.map((p) => [
       p.nic   || "—",
       p.name  || "—",
-      p.team  || "—",
+      zhMedicalTeam(p.team),
       p.ward  || "—",
       <Badge
         color={p.team ? "#16a34a" : "#64748b"}

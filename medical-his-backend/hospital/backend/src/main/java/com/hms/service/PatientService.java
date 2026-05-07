@@ -11,4 +11,6 @@ public interface PatientService {
     Patient getByNic(String nic);
     Patient update(String nic, PatientDTO dto);
     void delete(String nic);
+
+    List<Patient> findByName(String name);
 }

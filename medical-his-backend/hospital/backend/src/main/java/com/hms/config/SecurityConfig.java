@@ -24,6 +24,17 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    // 公开接口路径常量（统一管理）
+    public static final String[] PUBLIC_ENDPOINTS = {
+        "/api/v1/auth/**",
+        "/api/v1/ai-assistant/allDoctors",
+        "/api/v1/ai-assistant/searchDoctor",
+        "/api/v1/ai-assistant/searchPatient",
+        "/swagger-ui/**",
+        "/v3/api-docs/**",
+        "/ws/**"
+    };
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -34,29 +45,9 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(session -> 
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 公开接口：认证相关
-                .requestMatchers("/api/v1/auth/**").permitAll()
-                
-                // Swagger文档公开
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                
-                // WebSocket 公开（可以在握手时验证 JWT）
-                .requestMatchers("/ws/**").permitAll()
-                
-                // ADMIN接口需要认证
-                .requestMatchers("/api/v1/admin/**").authenticated()
-                
-                // PATIENT接口需要认证
-                .requestMatchers("/api/v1/patient/**").authenticated()
-                
-                // AI助手接口需要认证（支持两种路径）
-                .requestMatchers("/api/v1/ai/**").authenticated()
-                .requestMatchers("/api/v1/ai-assistant/**").authenticated()
-                
-                // 其他所有请求需要认证
+                .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

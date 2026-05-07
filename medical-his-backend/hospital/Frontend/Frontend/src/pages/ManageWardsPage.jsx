@@ -4,23 +4,14 @@ import { Field, FormCard } from "../components/UI";
 import { FiEdit, FiTrash2 } from "react-icons/fi";
 import { wardService } from "../services/wardService";
 import { toast } from "react-toastify";
+import {
+  WARD_TYPE_OPTIONS,
+  WARD_FLOOR_OPTIONS,
+  zhWardType,
+  zhWardFloor,
+} from "../utils/backendDisplayZh";
 
-// Format options for react-select
-const WARD_TYPE_OPTIONS = [
-  { value: "General", label: "普通病区" },
-  { value: "Surgical", label: "外科病区" },
-  { value: "ICU", label: "重症监护（ICU）" },
-  { value: "Maternity", label: "产科" },
-  { value: "Pediatrics", label: "儿科" },
-  { value: "Emergency", label: "急诊" }
-];
-
-const FLOOR_OPTIONS = [
-  { value: "Ground", label: "地面层" },
-  { value: "1st Floor", label: "1 层" },
-  { value: "2nd Floor", label: "2 层" },
-  { value: "3rd Floor", label: "3 层" }
-];
+const FLOOR_OPTIONS = WARD_FLOOR_OPTIONS;
 
 const initialForm = {
   id: null,
@@ -258,10 +249,10 @@ const ManageWardsPage = () => {
                   >
                     <td style={{ padding: 10, fontWeight: "bold" }}>{w.id}</td>
                     <td>{w.name}</td>
-                    <td>{w.type}</td>
+                    <td>{zhWardType(w.type)}</td>
                     <td>{w.capacity}</td>
                     <td>{w.occupied}</td>
-                    <td>{w.floor}</td>
+                    <td>{zhWardFloor(w.floor)}</td>
                     <td
                       style={{
                         display: "flex",

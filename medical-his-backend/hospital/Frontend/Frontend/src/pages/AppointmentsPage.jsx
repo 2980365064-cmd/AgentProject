@@ -4,11 +4,7 @@ import { toast } from "react-toastify";
 import { FiCalendar, FiEdit, FiXCircle } from "react-icons/fi";
 import { doctorService } from "../services/doctorService";
 import { appointmentService } from "../services/appointmentService"; // Imported your service
-
-const APPOINTMENT_STATUS_LABEL = {
-  Confirmed: '已确认',
-  Cancelled: '已取消',
-};
+import { zhAppointmentStatus, zhSpecialisation } from "../utils/backendDisplayZh";
 
 const AppointmentsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,10 +46,13 @@ const AppointmentsPage = () => {
   };
 
   const doctorOptions = useMemo(() => 
-    doctors.map((doc) => ({
-      value: doc.name,
-      label: `${doc.name}（${doc.specialization || doc.specialisation || '全科'}）`
-    })), 
+    doctors.map((doc) => {
+      const spec = doc.specialization ?? doc.specialisation;
+      return {
+        value: doc.name,
+        label: `${doc.name}（${spec ? zhSpecialisation(spec) : "全科"}）`,
+      };
+    }), 
   [doctors]);
 
   const handleCancelAppointment = (nic) => {
@@ -139,7 +138,7 @@ const AppointmentsPage = () => {
                   <td style={tdStyle}>{app.time}</td>
                   <td style={tdStyle}>
                     <span style={{ ...statusBadge, background: app.status === 'Confirmed' ? '#dcfce7' : '#fee2e2', color: app.status === 'Confirmed' ? '#166534' : '#991b1b' }}>
-                      {APPOINTMENT_STATUS_LABEL[app.status] || app.status}
+                      {zhAppointmentStatus(app.status)}
                     </span>
                   </td>
                   <td style={{ padding: '15px', display: 'flex', gap: '8px' }}>

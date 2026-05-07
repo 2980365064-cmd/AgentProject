@@ -142,9 +142,23 @@ export const aiAssistantService = {
   },
 
   /**
+   * 强制重连 WebSocket（登出/登录时调用）
+   */
+  reconnectWS: async () => {
+    console.log('🔄 强制重连 WebSocket...');
+    // 先断开现有连接
+    aiChatWS.disconnect();
+    // 等待一小段时间确保连接完全关闭
+    await new Promise(resolve => setTimeout(resolve, 100));
+    // 重新连接
+    return aiChatWS.connect();
+  },
+
+  /**
    * 断开 WebSocket
    */
   disconnectWS: () => {
+    console.log('🔌 断开 WebSocket 连接...');
     aiChatWS.disconnect();
   },
   

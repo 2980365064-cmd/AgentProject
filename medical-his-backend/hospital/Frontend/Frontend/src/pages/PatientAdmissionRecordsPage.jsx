@@ -2,24 +2,10 @@ import React, { useEffect, useState, useMemo } from "react";
 import { authFetch, handleApiResponse, API_BASE_URL, getStoredUser } from "../services/apiClient";
 import { toast } from "react-toastify";
 import { requirePatientRole } from "../utils/permissionCheck";
+import { zhMedicalTeam, zhDischargeType } from "../utils/backendDisplayZh";
 
 // 🔧 直接在文件中定义API调用（避免导入问题）
 const PATIENT_BASE_URL = `${API_BASE_URL}/api/v1/patient`;
-
-// 医疗组中英文映射表
-const TEAM_LABEL_MAP = {
-  "Medical Team A": "内科医疗组 A",
-  "Surgical Team B": "外科医疗组 B",
-  "Emergency Response Team": "急诊抢救组",
-  "Pediatric Specialists": "儿科专家组",
-  "Cardiology Unit": "心内科单元"
-};
-
-// 转换医疗组名称为中文
-function getTeamLabel(teamValue) {
-  if (!teamValue) return "—";
-  return TEAM_LABEL_MAP[teamValue] || teamValue;
-}
 
 async function getAdmissions() {
   console.log('🏥 获取住院记录');
@@ -222,7 +208,7 @@ const PatientAdmissionRecordsPage = () => {
                   <td style={td}>{p.name || p.patientName}</td>
                   <td style={td}>{p.ward || p.wardName}</td>
                   <td style={td}>{p.admissionDate || p.admission_date}</td>
-                  <td style={td}>{getTeamLabel(p.team || p.medicalTeam)}</td>
+                  <td style={td}>{zhMedicalTeam(p.team || p.medicalTeam)}</td>
                   <td style={td}>{p.description || p.notes || '—'}</td>
                 </tr>
               ))
@@ -257,7 +243,7 @@ const PatientAdmissionRecordsPage = () => {
                   <td style={td}>{p.name || p.patientName}</td>
                   <td style={td}>{p.admissionDate || p.admission_date}</td>
                   <td style={td}>{p.dischargeDate || p.discharge_date}</td>
-                  <td style={td}>{p.dischargeType || p.discharge_type || p.dischargeMethod}</td>
+                  <td style={td}>{zhDischargeType(p.dischargeType || p.discharge_type || p.dischargeMethod)}</td>
                   <td style={td}>{p.summary || p.dischargeSummary || p.notes}</td>
                 </tr>
               ))

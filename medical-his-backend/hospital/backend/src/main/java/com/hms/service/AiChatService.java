@@ -69,4 +69,12 @@ public interface AiChatService {
         AiChatRequest request,
         java.util.function.Consumer<String> chunkCallback
     );
+
+   
+
+    Response<?> searchD(String name);
+
+    Response<?> searchP(String name);
+
+
 }

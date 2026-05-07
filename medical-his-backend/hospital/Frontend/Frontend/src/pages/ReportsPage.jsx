@@ -4,6 +4,7 @@ import { wardService } from "../services/wardService";
 import { patientService } from "../services/patientService";
 import { treatmentService } from "../services/treatmentService";
 import { toast } from "react-toastify";
+import { zhWardType } from "../utils/backendDisplayZh";
 
 const REPORT_TYPE_TITLE = {
   "Ward Report": "病区占用报表",
@@ -44,7 +45,7 @@ const ReportsPage = () => {
           const rate = capacity > 0 ? ((occupied / capacity) * 100).toFixed(1) + "%" : "0%";
           return {
             col1: w.wardName || w.name,
-            col2: w.wardType || w.type || "普通",
+            col2: zhWardType(w.wardType || w.type) || "—",
             col3: capacity,
             col4: occupied,
             col5: rate

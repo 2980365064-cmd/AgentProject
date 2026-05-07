@@ -29,6 +29,7 @@ const ProtectedRoute = ({ children }) => {
   const user = getStoredUser();
   
   if (!user) {
+    console.log('🔒 ProtectedRoute: 用户未登录，重定向到登录页');
     return <Navigate to="/login" replace />;
   }
   
@@ -57,17 +58,47 @@ const HospitalLayout = () => {
 
   const [active, setActive] = useState(() => getDefaultActiveId(role));
 
+  // ✅ 监听用户登出，立即重定向
   useEffect(() => {
+    const currentUser = getStoredUser();
+    if (!currentUser) {
+      console.log('🔌 HospitalLayout: 检测到用户已登出，重定向到登录页');
+      window.location.href = '/login';
+      return;
+    }
+
     const handleStorageChange = () => {
       const newRole = readUserRole();
       if (newRole !== role) {
         setRole(newRole);
         setActive(getDefaultActiveId(newRole));
+        
+        // ✅ 如果检测到用户已登出（role 为空），强制断开 WebSocket 并跳转
+        if (!newRole) {
+          console.log('🔌 检测到用户登出，强制断开 WebSocket 连接');
+          import('./services/aiAssistantService').then(({ aiAssistantService }) => {
+            aiAssistantService.disconnectWS();
+          });
+          
+          // ✅ 使用 window.location 强制刷新到登录页
+          console.log('🔄 强制跳转到登录页');
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 100);
+        } else {
+          // ✅ 如果角色发生变化（如从 patient 切换到 admin），强制重连
+          if (role && newRole && role !== newRole) {
+            console.log('🔄 用户角色变更，强制重连 WebSocket:', { old: role, new: newRole });
+            import('./services/aiAssistantService').then(({ aiAssistantService }) => {
+              aiAssistantService.reconnectWS();
+            });
+          }
+        }
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
-    const interval = setInterval(handleStorageChange, 2000);
+    const interval = setInterval(handleStorageChange, 1000); // ✅ 缩短检查间隔到 1 秒
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -121,7 +152,7 @@ const HospitalLayout = () => {
               </>
             )}
           </div>
-          <ActivePage setActive={setActive} />
+          <ActivePage setActive={setActive} userRole={role} />
         </main>
       </div>
 

@@ -5,20 +5,12 @@ import { FiEdit, FiTrash2 } from "react-icons/fi";
 import { patientService } from "../services/patientService";
 import { wardService } from "../services/wardService"; 
 import { toast } from "react-toastify";
-
-const TEAM_OPTIONS = [
-  { value: "Medical Team A", label: "内科医疗组 A" },
-  { value: "Surgical Team B", label: "外科医疗组 B" },
-  { value: "Emergency Response Team", label: "急诊抢救组" },
-  { value: "Pediatric Specialists", label: "儿科专家组" },
-  { value: "Cardiology Unit", label: "心内科单元" }
-];
-
-const GENDER_OPTIONS = [
-  { value: "Male", label: "男" },
-  { value: "Female", label: "女" },
-  { value: "Other", label: "其他" }
-];
+import {
+  GENDER_OPTIONS,
+  MEDICAL_TEAM_OPTIONS as TEAM_OPTIONS,
+  zhMedicalTeam,
+  zhWardFloor,
+} from "../utils/backendDisplayZh";
 
 const initialForm = {
   name: "",
@@ -71,7 +63,7 @@ const AdmitPatientPage = () => {
   const wardOptions = useMemo(() => 
     wards.map((w) => ({
       value: w.name,
-      label: `${w.name}（楼层：${w.floor}）`
+      label: `${w.name}（楼层：${zhWardFloor(w.floor)}）`
     })), 
   [wards]);
 
@@ -290,7 +282,7 @@ const AdmitPatientPage = () => {
                   <td style={{ padding: 10 }}>{p.name}</td>
                   <td>{p.nic}</td>
                   <td>{p.ward}</td>
-                  <td>{p.team}</td>
+                  <td>{zhMedicalTeam(p.team)}</td>
                   <td style={{ display: "flex", justifyContent: "center", gap: 12, padding: 10 }}>
                     <FiEdit
                       size={20}

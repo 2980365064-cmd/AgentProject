@@ -1,6 +1,7 @@
 package com.hms.controller.patient;
 
 import com.hms.annotation.RequireRole;
+import com.hms.dto.request.AppointmentRequest;
 import com.hms.dto.request.BindNicRequest;
 import com.hms.service.PatientPortalService;
 import com.hms.util.Response;
@@ -24,6 +25,30 @@ public class patient {
             @RequestParam(required = false) String date,
             @RequestParam(required = false) String timeSlot) {
         return patientPortalService.getAvailableDoctors(date, timeSlot);
+    }
+
+    /**
+     * 我的预约挂号
+     */
+    @GetMapping("/appointments")
+    public Response<?> getMyAppointment() {
+        return patientPortalService.getMyAppointment();
+    }
+
+    /**
+     * 新建或改约
+     */
+    @PostMapping("/appointments")
+    public Response<?> bookAppointment(@RequestBody AppointmentRequest request) {
+        return patientPortalService.bookAppointment(request);
+    }
+
+    /**
+     * 取消我的预约
+     */
+    @PatchMapping("/appointments/cancel")
+    public Response<?> cancelMyAppointment() {
+        return patientPortalService.cancelMyAppointment();
     }
 
     /**

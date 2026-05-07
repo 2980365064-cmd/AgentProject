@@ -52,4 +52,9 @@ public class DoctorServiceImpl implements DoctorService {
     public void delete(String mobile) {
         repository.deleteByMobile(mobile);
     }
+
+    @Override
+    public List<Doctor> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

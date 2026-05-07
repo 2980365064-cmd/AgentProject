@@ -20,8 +20,8 @@ class MainChatModelFactory(BaseModelFactory):
             model=agent_conf["main_chat_model_name"],
             base_url=agent_conf["main_chat_model_base_url"],
             api_key=agent_conf["main_chat_model_api_key"],
-            request_timeout =3.0,
-            max_retries=0
+            request_timeout =30.0,
+            max_retries=3
         )
 
 #备用聊天模型工厂

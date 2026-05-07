@@ -11,4 +11,6 @@ public interface DoctorService {
     Doctor getByMobile(String mobile); // Changed
     Doctor update(String mobile, DoctorDTO dto); // Changed
     void delete(String mobile);
+
+    List<Doctor> findByName(String name);
 }

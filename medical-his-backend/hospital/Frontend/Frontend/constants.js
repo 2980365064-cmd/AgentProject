@@ -29,7 +29,7 @@ export const ADMIN_NAV_ITEMS = [
   { id: "manageDoctors", label: "医生管理", icon: "manageDoctors" },
   { id: "appointments", label: "预约挂号", icon: "appointments" },
   { id: "reports", label: "统计报表", icon: "reports" },
-  { id: "aiAssistant", label: "智能问答助手", icon: "aiAssistant" },
+  { id: "aiAssistant", label: "管理小助手", icon: "aiAssistant" },
 ];
 
 /** 兼容旧引用：等同于管理员菜单 */
@@ -43,7 +43,7 @@ export const PATIENT_NAV_ITEMS = [
   { id: PATIENT_ROOT_ID, label: "查看指定时间段空闲医生", icon: "patientCalendar" },
   { id: "patientAdmissionRecords", label: "查看住院记录", icon: "patientBed" },
   { id: "patientMyCases", label: "我的病例", icon: "patientCase" },
-  { id: "aiAssistant", label: "智能问答助手", icon: "aiAssistant" },
+  { id: "aiAssistant", label: "健康小助手", icon: "aiAssistant" },
 ];
 
 export function isPatientRole(role) {
@@ -64,6 +64,11 @@ export function getDashboardRoot(role) {
     return { id: PATIENT_ROOT_ID, label: "患者服务" };
   }
   return { id: "dashboard", label: "工作台" };
+}
+
+/** AI 助手展示名（与侧栏菜单一致）：患者「健康」、医护端「管理」 */
+export function getAiAssistantDisplayName(role) {
+  return isPatientRole(role) ? "健康小助手" : "管理小助手";
 }
 
 export const PAGES = {

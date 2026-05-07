@@ -3,6 +3,7 @@ package com.hms.controller.Ai;
 import com.hms.annotation.RequireRole;
 import com.hms.dto.request.AiChatRequest;
 import com.hms.dto.request.AiSessionCreateRequest;
+import com.hms.dto.request.AppointmentRequest;
 import com.hms.service.AiChatService;
 import com.hms.util.JwtUtil;
 import com.hms.util.Response;
@@ -16,7 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/v1/ai-assistant")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "http://localhost:5173")
-@RequireRole({"PATIENT", "DOCTOR"})
+
 public class AiAssistantController {
 
     @Autowired
@@ -24,6 +25,11 @@ public class AiAssistantController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private com.hms.service.DoctorService doctorService;
+    @Autowired
+    private com.hms.service.PatientPortalService patientPortalService;
 
     /**
      * 发送消息到AI助手（智能问答）
@@ -83,7 +89,36 @@ public class AiAssistantController {
 
         return aiChatService.deleteSession(userId, userRole, sessionId);
     }
+    /**
+     * 根据医生姓名查询信息
+     */
+    @GetMapping("/searchDoctor")
+    public Response<?> searchDoctor(HttpServletRequest request, @RequestParam String name) {
+        return aiChatService.searchD(name);
+    }
 
+    /**
+     * 根据患者姓名查询信息
+     */
+    @GetMapping("/searchPatient")
+    public Response<?> searchPatient(HttpServletRequest request, @RequestParam String name) {
+        return aiChatService.searchP(name);
+    }
+    /**
+     * 查询所有医生信息
+     */
+    @GetMapping("/allDoctors")
+    public Response<?> getAllDoctors(HttpServletRequest request) {
+        return new Response<>("success", "查询成功", doctorService.getAll());
+    }
+
+    /**
+     * 预约挂号
+     */
+    @PostMapping("/appointment")
+    public Response<?> appointment(HttpServletRequest request, @RequestBody AppointmentRequest appointmentRequest) {
+        return patientPortalService.bookAppointment(appointmentRequest);
+    }
     /**
      * 从请求中提取JWT Token
      */

@@ -5,11 +5,10 @@ import { patientService } from "../services/patientService";
 import { dischargeService } from "../services/dischargeService";
 import { toast } from "react-toastify";
 
-const DISCHARGE_TYPES = [
-  { value: "Regular", label: "常规出院" },
-  { value: "AOR", label: "医嘱离院（AOR）" },
-  { value: "Expired", label: "死亡" }
-];
+import {
+  DISCHARGE_TYPE_OPTIONS as DISCHARGE_TYPES,
+  zhDischargeType,
+} from "../utils/backendDisplayZh";
 
 const EMPTY_FORM = {
   nic: "",
@@ -201,7 +200,7 @@ const DischargePatientPage = () => {
                   <td>{p.nic}</td>
                   <td>{p.dischargeDate}</td>
                   <td>
-                    <span style={getTypeBadgeStyle(p.dischargeType)}>{p.dischargeType}</span>
+                    <span style={getTypeBadgeStyle(p.dischargeType)}>{zhDischargeType(p.dischargeType)}</span>
                   </td>
                   <td style={{ fontSize: "13px", color: "#6b7280", maxWidth: "250px" }}>{p.summary}</td>
                 </tr>

@@ -36,8 +36,9 @@ const Login = () => {
         try {
             const response = await loginUser(email, password);
 
-            console.log("Full API Response:", response);
-
+            console.log("========== 登录响应详情 ==========");
+            console.log("Full API Response:", JSON.stringify(response, null, 2));
+            
             if (response.status === 'success') {
                 // ✅ 后端已在 data 中包含 nic 字段
                 // persistSessionFromAuthResponse 会自动保存整个 data 对象
@@ -46,23 +47,31 @@ const Login = () => {
                 const userData = getStoredUser();
                 
                 if (userData) {
-                    console.log('✅ 登录成功，用户数据:', {
-                        name: userData.name,
-                        role: userData.role,
-                        nic: userData.nic || '未绑定'
-                    });
+                    console.log('✅ 登录成功，保存的用户数据:');
+                    console.log('   - 用户ID:', userData.id ?? userData.userId);
+                    console.log('   - 用户名:', userData.name ?? userData.username);
+                    console.log('   - 邮箱:', userData.email ?? userData.mail);
+                    console.log('   - 角色:', userData.role ?? userData.userRole);
+                    console.log('   - Token:', userData.token ?? userData.accessToken ?? userData.jwt ?? userData.access_token ? '✓ 已保存' : '✗ 未找到');
+                    console.log('   - NIC:', userData.nic || '未绑定');
+                    console.log('   - 所有字段:', Object.keys(userData));
+                    console.log("=====================================");
                     
                     setErrorMessage('');
                     navigate('/dashboard');
                 } else {
+                    console.error('❌ 登录后未能获取用户数据');
                     setErrorMessage('邮箱或密码不正确。');
                 }
             } else {
+                console.error('❌ 登录响应状态不是 success:', response.status);
                 setErrorMessage('邮箱或密码不正确。');
             }
         // eslint-disable-next-line no-unused-vars
         } catch (error) {
-            console.error('登录失败:', error);
+            console.error('❌ 登录失败:', error);
+            console.error('   错误信息:', error.message);
+            console.error('   错误堆栈:', error.stack);
             setErrorMessage('登录失败，请稍后重试。');
         }
     };

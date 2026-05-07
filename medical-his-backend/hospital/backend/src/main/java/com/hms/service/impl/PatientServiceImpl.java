@@ -47,6 +47,11 @@ public class PatientServiceImpl implements PatientService {
         repository.deleteByNic(nic);
     }
 
+    @Override
+    public List<Patient> findByName(String name) {
+        return repository.findByName(name);
+    }
+
     private Patient saveOrUpdate(Patient p, PatientDTO dto) {
         p.setName(dto.getName());
         p.setContact(dto.getContact());

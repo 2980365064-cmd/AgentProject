@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Badge } from "../components/UI";
 import { patientService } from "../services/patientService";
 import { dischargeService } from "../services/dischargeService";
+import { zhGender, zhMedicalTeam, zhDischargeType } from "../utils/backendDisplayZh";
 
 const PatientDetailsPage = () => {
   const [query, setQuery] = useState("");
@@ -52,16 +53,16 @@ const PatientDetailsPage = () => {
   const displayItems = patient ? [
     { label: "证件号（NIC）",      value: patient.nic,           icon: "🪪" },
     { label: "年龄",             value: patient.age,           icon: "🎂" },
-    { label: "性别",          value: patient.gender,        icon: "👤" },
+    { label: "性别",          value: zhGender(patient.gender),        icon: "👤" },
     { label: "所在病区",   value: patient.ward,          icon: "🏥" },
-    { label: "医疗组",    value: patient.team,          icon: "👨‍⚕️" },
+    { label: "医疗组",    value: zhMedicalTeam(patient.team),          icon: "👨‍⚕️" },
     { label: "入院日期",  value: patient.admissionDate, icon: "📥" },
     { label: "联系电话",  value: patient.contact,       icon: "📞" },
     { label: "入院备注 / 诊断", value: patient.description, icon: "📋" },
     // Show these only if status is Discharged
     ...(status === "Discharged" ? [
       { label: "出院日期", value: patient.dischargeDate, icon: "📅" },
-      { label: "出院方式", value: patient.dischargeType, icon: "🛡️" },
+      { label: "出院方式", value: zhDischargeType(patient.dischargeType), icon: "🛡️" },
       { label: "出院小结",  value: patient.summary,       icon: "📝" },
     ] : [])
   ] : [];

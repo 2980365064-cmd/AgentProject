@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { doctorService } from "../services/doctorService";
 import { toast } from "react-toastify";
+import { zhSpecialisation, zhMedicalTeam } from "../utils/backendDisplayZh";
 
 /**
  * 患者端：按时间段查看空闲医生（展示层；具体「空闲」逻辑由后端排班接口对接后可替换查询）
@@ -95,9 +96,9 @@ const PatientFreeDoctorsPage = () => {
                 rows.map((d, i) => (
                   <tr key={d.mobile || i} style={{ background: i % 2 ? "#fff" : "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
                     <td style={td}>{d.name}</td>
-                    <td style={td}>{d.specialisation}</td>
+                    <td style={td}>{zhSpecialisation(d.specialisation)}</td>
                     <td style={td}>{d.ward}</td>
-                    <td style={td}>{d.team}</td>
+                    <td style={td}>{zhMedicalTeam(d.team)}</td>
                     <td style={td}>{d.mobile}</td>
                   </tr>
                 ))
