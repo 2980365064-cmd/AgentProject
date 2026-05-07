@@ -3,6 +3,7 @@ import { authFetch, handleApiResponse, API_BASE_URL, getStoredUser } from "../se
 import { toast } from "react-toastify";
 import { requirePatientRole } from "../utils/permissionCheck";
 import { zhMedicalTeam, zhDischargeType } from "../utils/backendDisplayZh";
+import { getPatientNicFromUser } from "../utils/patientNic";
 
 // 🔧 直接在文件中定义API调用（避免导入问题）
 const PATIENT_BASE_URL = `${API_BASE_URL}/api/v1/patient`;
@@ -11,18 +12,6 @@ async function getAdmissions() {
   console.log('🏥 获取住院记录');
   const response = await authFetch(`${PATIENT_BASE_URL}/admissions`);
   return await handleApiResponse(response, "获取住院记录");
-}
-
-function getPatientNicFromUser(user) {
-  if (!user) return "";
-  return (
-    user.nic ??
-    user.patientNic ??
-    user.patientNIC ??
-    user.idNumber ??
-    user.patientId ??
-    ""
-  );
 }
 
 /**

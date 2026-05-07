@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "./Icon";
-import { USER_DATA_KEY, getStoredUser, logout } from "../services/apiClient";
+import { getStoredUser, logout } from "../services/apiClient";
 import { isPatientRole } from "../../constants";
 import { toast } from "react-toastify";
 

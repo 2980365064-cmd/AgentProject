@@ -1,20 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { patientUserService } from "../services/patientUserService";
 import { getStoredUser, setStoredUser } from "../services/apiClient";
+import { getPatientNicFromUser } from "../utils/patientNic";
 import { toast } from "react-toastify";
 import { FiSave, FiEdit2, FiRefreshCw } from "react-icons/fi";
-
-function getPatientNicFromUser(user) {
-  if (!user) return "";
-  return (
-    user.nic ??
-    user.patientNic ??
-    user.patientNIC ??
-    user.idNumber ??
-    user.patientId ??
-    ""
-  );
-}
 
 /**
  * 患者端：我的病例（按证件号匹配的诊疗记录）
