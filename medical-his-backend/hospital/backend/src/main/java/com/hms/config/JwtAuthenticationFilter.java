@@ -10,13 +10,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Locale;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -36,10 +38,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (jwt != null && jwtUtil.validateToken(jwt, jwtUtil.getUsernameFromToken(jwt))) {
                 String username = jwtUtil.getUsernameFromToken(jwt);
                 String role = jwtUtil.getRoleFromToken(jwt);
+                Integer userId = jwtUtil.getUserIdFromToken(jwt);
+                String normalizedRole = role == null ? "" : role.trim().toUpperCase(Locale.ROOT);
 
                 // 创建认证对象
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(username, null, new ArrayList<>());
+                        new UsernamePasswordAuthenticationToken(
+                                username,
+                                null,
+                                normalizedRole.isEmpty()
+                                        ? Collections.emptyList()
+                                        : Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + normalizedRole))
+                        );
 
                 // 设置详细信息
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -49,9 +59,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // 将用户信息存入request属性，供后续使用
                 request.setAttribute("username", username);
-                request.setAttribute("role", role);
+                request.setAttribute("role", normalizedRole);
+                if (userId != null) {
+                    request.setAttribute("userId", userId);
+                }
 
-                logger.debug("JWT认证成功，用户: {}, 角色: {}", username, role);
+                logger.debug("JWT认证成功，用户: {}, 角色: {}, userId: {}", username, normalizedRole, userId);
             }
         } catch (Exception e) {
             logger.error("JWT认证失败: {}", e.getMessage());

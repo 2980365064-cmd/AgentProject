@@ -21,10 +21,9 @@ current_bearer_token: contextvars.ContextVar[Optional[str]] = contextvars.Contex
 )
 
 
-@tool(description="通过医生姓名，获取医生信息")
+@tool(description="通过医生姓名查询医生信息。**重要规则**：如果返回空字符串或'未找到'，说明该医生不存在于系统中，绝对不要编造任何医生信息，直接告知用户未找到该医生。")
 def get_doctor_info(name: str) -> str:
     """
-
 
     Args:
         name: 医生姓名
@@ -102,7 +101,7 @@ def get_doctor_info(name: str) -> str:
         return f"查询失败: {str(e)}"
 
 
-@tool(description="通过患者姓名，获取患者信息")
+@tool(description="通过患者姓名查询患者信息。**重要规则**：如果返回空字符串或'未找到'，说明该患者不存在于系统中，绝对不要编造任何患者信息，直接告知用户未找到该患者。")
 def get_patient_info(name: str) -> str:
     """
 
@@ -780,7 +779,7 @@ def book_appointment(
         return f"预约失败: {str(e)}"
 
 
-@tool(description="从检索服务中检索参考资料")
+@tool(description="【优先调用】从权威医学知识库检索专业参考资料。适用于：疾病症状查询、治疗方案咨询、用药指南、健康常识、医学术语解释等专业医学问题。调用后会返回基于最新医学文献的准确信息。示例：用户问'骨折怎么处理' → 调用此工具检索骨折相关知识")
 def rag_summarize(query: str) -> str:
     return rag.rag_summarize(query)
 

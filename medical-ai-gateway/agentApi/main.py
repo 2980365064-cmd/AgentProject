@@ -7,6 +7,10 @@ from typing import Optional, Union, Any
 import uuid
 import json
 import asyncio
+import os
+import tempfile
+import urllib.request
+from pathlib import Path
 from datetime import datetime
 
 from agent.react_agent import ReactAgent
@@ -15,6 +19,7 @@ from utils.redis_chat_history import get_messages, clear_session, get_redis_clie
 from utils.config_handler import redis_conf
 from utils.logger_handler import logger
 from agentApi.response import ApiResult, ChatData, SessionCreateData, SessionHistoryData, SessionListData, SessionListItem, MessageItem, HealthData, ResultCode
+from rag.vector_store import VectorStoreService
 
 # ==================== 统一 API 前缀和版本控制 ====================
 API_PREFIX = "/api"
@@ -25,13 +30,34 @@ app = FastAPI(
     title="医疗AI智能问答系统",
     description="为传统医疗管理系统提供AI智能问答服务",
     version="1.0.0",
-    docs_url=f"{BASE_PATH}/docs",      # 文档地址: /api/v1/docs
-    redoc_url=f"{BASE_PATH}/redoc",    # ReDoc地址: /api/v1/redoc
-    openapi_url=f"{BASE_PATH}/openapi.json"  # OpenAPI规范: /api/v1/openapi.json
+    docs_url=f"{BASE_PATH}/docs",
+    redoc_url=f"{BASE_PATH}/redoc",
+    openapi_url=f"{BASE_PATH}/openapi.json"
 )
 
 # 初始化Agent实例（全局单例）
 agent = ReactAgent()
+
+# ✅ 初始化向量知识库服务
+vector_store_service = VectorStoreService()
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时自动加载新文档到向量库"""
+    logger.info("🚀 开始初始化 Elasticsearch 向量知识库...")
+    try:
+        # 显示当前文档数量
+        count = vector_store_service.vector_store.get_document_count()
+        logger.info(f"📊 当前知识库文档数量: {count}")
+        
+        # 加载新文档
+        vector_store_service.load_document()
+        
+        # 再次显示文档数量
+        new_count = vector_store_service.vector_store.get_document_count()
+        logger.info(f"✅ 向量知识库初始化完成，当前文档总数: {new_count}")
+    except Exception as e:
+        logger.error(f"❌ 向量知识库初始化失败: {e}", exc_info=True)
 
 
 class ChatRequest(BaseModel):
@@ -82,7 +108,8 @@ def semantic_interceptor(user_input: str) -> bool:
         result = chain.invoke({"input": user_input})
         return result.strip().upper() == "YES"
     except Exception as e:
-        logger.error(f"语义拦截器异常: {e}")
+        logger.error(f"语义拦截器异常: {type(e).__name__}: {str(e)}")
+        logger.warning("⚠️ LLM 不可用，跳过语义拦截，依赖关键词拦截")
         return False
 
 
@@ -596,3 +623,68 @@ async def chat_stream(request: ChatRequest):
     )
 
 
+# ==================== 管理端知识库：MinIO 合并后 Kafka 异步入库 ====================
+
+class KnowledgeIngestRequest(BaseModel):
+    fileId: Optional[int] = Field(None, description="Java 侧记录 ID")
+    uploadId: str
+    bucket: str
+    objectKey: str
+    presignedDownloadUrl: str
+    originalFilename: str
+    contentType: str
+    ingestSourceKey: str
+
+
+class DeleteBySourcePrefixRequest(BaseModel):
+    sourcePrefix: str = Field(..., min_length=1)
+
+
+def _download_to_tempfile(url: str, suffix: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    try:
+        urllib.request.urlretrieve(url, path)
+    except Exception:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    return path
+
+
+@app.post(f"{BASE_PATH}/knowledge/ingest", summary="管理端知识文件入库（预签名 URL）", tags=["Knowledge"])
+async def knowledge_ingest(body: KnowledgeIngestRequest):
+    """供 Java Kafka 消费者调用：下载 MinIO 预签名链接，解析后写入 ES"""
+    try:
+        suffix = Path(body.originalFilename).suffix or ".bin"
+        if suffix.lower() not in (".pdf", ".txt"):
+            return ApiResult.error(
+                message="仅支持 .pdf / .txt",
+                code=ResultCode.BAD_REQUEST,
+            )
+        tmp_path = _download_to_tempfile(body.presignedDownloadUrl, suffix)
+        try:
+            n = vector_store_service.ingest_admin_file(
+                tmp_path, body.originalFilename, body.ingestSourceKey
+            )
+            return ApiResult.success(data={"chunks": n}, message="向量入库成功")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    except Exception as e:
+        logger.error(f"知识库入库失败: {e}", exc_info=True)
+        return ApiResult.error(message=f"入库失败: {str(e)}", code=ResultCode.INTERNAL_ERROR)
+
+
+@app.post(f"{BASE_PATH}/knowledge/delete-by-source-prefix", summary="按 source 前缀删除向量", tags=["Knowledge"])
+async def knowledge_delete_by_prefix(body: DeleteBySourcePrefixRequest):
+    try:
+        deleted = vector_store_service.vector_store.delete_by_source_prefix(body.sourcePrefix)
+        return ApiResult.success(data={"deleted": deleted}, message="删除完成")
+    except Exception as e:
+        logger.error(f"按前缀删除失败: {e}", exc_info=True)
+        return ApiResult.error(message=str(e), code=ResultCode.INTERNAL_ERROR)

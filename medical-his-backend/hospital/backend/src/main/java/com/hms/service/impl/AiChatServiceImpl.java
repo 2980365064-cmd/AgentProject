@@ -14,20 +14,30 @@ import com.hms.util.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.ConnectException;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Callable;
 
 @Service
 public class AiChatServiceImpl implements AiChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
+
+    /** 网关超时/重试耗尽后返回给前端的统一提示 */
+    public static final String AI_GATEWAY_UNAVAILABLE = "当前AI服务暂不可用";
+
     @Autowired
     private PatientService patientService;
     @Autowired
@@ -42,7 +52,18 @@ public class AiChatServiceImpl implements AiChatService {
     @Value("${ai.fastapi.url:http://localhost:8000}")
     private String fastApiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    @Qualifier("aiGatewayRestTemplate")
+    private RestTemplate aiGatewayRestTemplate;
+
+    @Value("${ai.gateway.max-retries:3}")
+    private int aiGatewayMaxRetries;
+
+    @Value("${ai.gateway.total-timeout-ms:30000}")
+    private int aiGatewayTotalTimeoutMs;
+
+    @Value("${ai.gateway.retry-backoff-ms:400}")
+    private long aiGatewayRetryBackoffMs;
 
     /** 由登录角色决定助手档案（以服务端 JWT 为准，防止前端伪造） */
     static String assistantProfileForRole(String userRole) {
@@ -89,7 +110,8 @@ public class AiChatServiceImpl implements AiChatService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+            ResponseEntity<Map> response = executeWithRetry("AI聊天", () ->
+                    aiGatewayRestTemplate.postForEntity(url, entity, Map.class));
             
             log.info("Python响应状态码: {}", response.getStatusCode());
             
@@ -132,6 +154,9 @@ public class AiChatServiceImpl implements AiChatService {
             }
         } catch (Exception e) {
             log.error("✗ 调用AI服务异常", e);
+            if (isAiGatewayFailure(e)) {
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
             return new Response<>("error", "AI服务异常: " + e.getMessage(), null);
         }
     }
@@ -154,7 +179,8 @@ public class AiChatServiceImpl implements AiChatService {
             log.info("用户ID: {}, 角色: {}, 助手档案: {}", userId, userRole, assistantProfile);
 
             HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            ResponseEntity<Map> response = executeWithRetry("AI会话列表", () ->
+                    aiGatewayRestTemplate.exchange(url, HttpMethod.GET, entity, Map.class));
             
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Map<String, Object> body = response.getBody();
@@ -207,7 +233,8 @@ public class AiChatServiceImpl implements AiChatService {
             log.info("用户ID: {}, 角色: {}, 助手档案: {}, 会话ID: {}", userId, userRole, assistantProfile, sessionId);
 
             HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            ResponseEntity<Map> response = executeWithRetry("AI会话历史", () ->
+                    aiGatewayRestTemplate.exchange(url, HttpMethod.GET, entity, Map.class));
             
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Map<String, Object> body = response.getBody();
@@ -234,6 +261,9 @@ public class AiChatServiceImpl implements AiChatService {
             return new Response<>("error", "获取历史记录失败", null);
         } catch (Exception e) {
             log.error("✗ 获取会话历史异常", e);
+            if (isAiGatewayFailure(e)) {
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
             return new Response<>("error", "系统异常: " + e.getMessage(), null);
         }
     }
@@ -251,8 +281,8 @@ public class AiChatServiceImpl implements AiChatService {
             HttpHeaders headers = new HttpHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    url, HttpMethod.DELETE, entity, Map.class);
+            ResponseEntity<Map> response = executeWithRetry("AI删除会话", () ->
+                    aiGatewayRestTemplate.exchange(url, HttpMethod.DELETE, entity, Map.class));
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map<String, Object> body = response.getBody();
@@ -276,6 +306,9 @@ public class AiChatServiceImpl implements AiChatService {
             }
         } catch (Exception e) {
             log.error("✗ 删除会话异常", e);
+            if (isAiGatewayFailure(e)) {
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
             return new Response<>("error", "删除会话异常: " + e.getMessage(), null);
         }
     }
@@ -303,8 +336,8 @@ public class AiChatServiceImpl implements AiChatService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    url, HttpMethod.POST, entity, Map.class);
+            ResponseEntity<Map> response = executeWithRetry("AI创建会话", () ->
+                    aiGatewayRestTemplate.exchange(url, HttpMethod.POST, entity, Map.class));
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map<String, Object> body = response.getBody();
@@ -345,6 +378,9 @@ public class AiChatServiceImpl implements AiChatService {
             }
         } catch (Exception e) {
             log.error("✗ 创建会话异常", e);
+            if (isAiGatewayFailure(e)) {
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
             return new Response<>("error", "创建会话异常: " + e.getMessage(), null);
         }
     }
@@ -464,7 +500,38 @@ public class AiChatServiceImpl implements AiChatService {
                     .build();
 
             java.net.URI uri = java.net.URI.create(url);
-            java.net.http.HttpResponse<java.util.stream.Stream<String>> response = postChatStreamSse(httpClient, uri, jsonBytes);
+            java.net.http.HttpResponse<java.util.stream.Stream<String>> response = null;
+            long streamDeadline = System.currentTimeMillis() + aiGatewayTotalTimeoutMs;
+            Exception lastStreamEx = null;
+            for (int streamAttempt = 0; streamAttempt <= aiGatewayMaxRetries; streamAttempt++) {
+                if (System.currentTimeMillis() >= streamDeadline) {
+                    break;
+                }
+                try {
+                    response = postChatStreamSse(httpClient, uri, jsonBytes);
+                    break;
+                } catch (Exception ex) {
+                    lastStreamEx = ex;
+                    if (!isStreamConnectRetryable(ex) || streamAttempt >= aiGatewayMaxRetries) {
+                        throw ex;
+                    }
+                    log.warn("AI流式连接第 {} 次失败，将重试: {}", streamAttempt + 1, ex.getMessage());
+                    long remain = streamDeadline - System.currentTimeMillis();
+                    if (remain <= 0) {
+                        break;
+                    }
+                    try {
+                        Thread.sleep(Math.min(aiGatewayRetryBackoffMs * (streamAttempt + 1), Math.max(remain / 2, 1)));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+                    }
+                }
+            }
+            if (response == null) {
+                log.error("✗ AI流式连接在 {}ms 内重试耗尽", aiGatewayTotalTimeoutMs, lastStreamEx);
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
 
             int status = response.statusCode();
             if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
@@ -557,6 +624,9 @@ public class AiChatServiceImpl implements AiChatService {
             
         } catch (Exception e) {
             log.error("✗ 调用AI流式服务异常", e);
+            if (isAiGatewayFailure(e)) {
+                return new Response<>("error", AI_GATEWAY_UNAVAILABLE, null);
+            }
             return new Response<>("error", "AI服务异常: " + e.getMessage(), null);
         }
     }
@@ -575,6 +645,109 @@ public class AiChatServiceImpl implements AiChatService {
         return new Response<>("success", "查询成功", patientList);
     }
 
+
+    /**
+     * 调用 AI 网关：超时/连接失败/502–504 时最多重试 {@link #aiGatewayMaxRetries} 次，
+     * 全程不超过 {@link #aiGatewayTotalTimeoutMs} 毫秒。
+     */
+    private <T> T executeWithRetry(String label, Callable<T> callable) throws Exception {
+        long deadline = System.currentTimeMillis() + aiGatewayTotalTimeoutMs;
+        Exception last = null;
+        for (int attempt = 0; attempt <= aiGatewayMaxRetries; attempt++) {
+            if (System.currentTimeMillis() >= deadline) {
+                log.warn("{} 已达总超时 {}ms，停止重试", label, aiGatewayTotalTimeoutMs);
+                break;
+            }
+            try {
+                return callable.call();
+            } catch (Exception ex) {
+                last = ex;
+                if (!isRetryable(ex) || attempt >= aiGatewayMaxRetries) {
+                    throw ex;
+                }
+                log.warn("{} 第 {} 次调用失败，将重试（最多 {} 次重试）: {}", label, attempt + 1, aiGatewayMaxRetries, ex.toString());
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) {
+                    break;
+                }
+                long sleep = aiGatewayRetryBackoffMs * (attempt + 1);
+                try {
+                    Thread.sleep(Math.min(sleep, Math.max(remain / 2, 1)));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new ResourceAccessException("Interrupted while waiting to retry AI gateway",
+                            new java.io.IOException(ie));
+                }
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
+        throw new ResourceAccessException("AI gateway call exhausted without result",
+                new java.io.IOException("no successful response"));
+    }
+
+    private static boolean isRetryable(Throwable ex) {
+        if (ex instanceof ResourceAccessException) {
+            return true;
+        }
+        if (ex instanceof HttpServerErrorException hsee) {
+            int code = hsee.getStatusCode().value();
+            return code == 502 || code == 503 || code == 504;
+        }
+        Throwable c = ex.getCause();
+        if (c != null && c != ex) {
+            return isRetryable(c);
+        }
+        return false;
+    }
+
+    private static boolean isStreamConnectRetryable(Throwable ex) {
+        if (ex instanceof HttpTimeoutException) {
+            return true;
+        }
+        if (ex instanceof ConnectException) {
+            return true;
+        }
+        if (ex instanceof java.io.IOException) {
+            String m = ex.getMessage() != null ? ex.getMessage().toLowerCase(Locale.ROOT) : "";
+            return m.contains("timed out") || m.contains("timeout") || m.contains("connection reset")
+                    || m.contains("connection refused");
+        }
+        Throwable c = ex.getCause();
+        if (c != null && c != ex) {
+            return isStreamConnectRetryable(c);
+        }
+        return false;
+    }
+
+    private static boolean isAiGatewayFailure(Throwable ex) {
+        if (ex instanceof ResourceAccessException) {
+            return true;
+        }
+        if (ex instanceof HttpServerErrorException) {
+            return true;
+        }
+        if (ex instanceof ConnectException) {
+            return true;
+        }
+        if (ex instanceof HttpTimeoutException) {
+            return true;
+        }
+        String msg = ex.getMessage();
+        if (msg != null) {
+            String m = msg.toLowerCase(Locale.ROOT);
+            if (m.contains("timed out") || m.contains("timeout") || m.contains("connection refused")
+                    || m.contains("connection reset")) {
+                return true;
+            }
+        }
+        Throwable c = ex.getCause();
+        if (c != null && c != ex) {
+            return isAiGatewayFailure(c);
+        }
+        return false;
+    }
 
     /** FastAPI 的 code 在 JSON 中常为 Integer，部分序列化场景为 Long */
     private static int pythonApiCode(Map<String, Object> body) {

@@ -1,0 +1,31 @@
+# Elasticsearch 配置
+es_host: localhost
+es_port: 9200
+es_index_name: medical_knowledge
+es_user: elastic
+es_password: ""
+
+# 向量检索配置
+vector_field: embedding
+text_field: content
+# IK 插件已安装时使用中文分词；未装 IK 时改为 standard 并删除旧索引后重建
+text_analyzer: ik_max_word
+vector_dims: 1024
+metadata_fields: ["source", "page", "filename"]
+
+# 混合检索权重（向量相似度权重 : BM25 关键词权重）
+vector_weight: 0.7
+bm25_weight: 0.3
+
+# 检索返回数量
+k: 5
+
+# 文档分块配置
+chunk_size: 200
+chunk_overlap: 20
+separators: ["\n\n", "\n", "。", "！", "？", "；", " "]
+
+# 数据源配置
+data_path: data
+md5_hex_store: md5.text
+allow_knowledge_file_type: ["pdf", "txt"]

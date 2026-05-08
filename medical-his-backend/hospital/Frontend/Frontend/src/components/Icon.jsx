@@ -93,6 +93,24 @@ const Icon = ({ name }) => {
           <line x1="6" y1="20" x2="6" y2="14"/>
         </svg>
       ),
+      knowledgeFiles: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <path d="M12 18v-6"/>
+          <path d="M9 15l3 3 3-3"/>
+        </svg>
+      ),
+      auditLogs: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+          <path d="M4 5h16"/>
+          <path d="M4 12h16"/>
+          <path d="M4 19h16"/>
+          <circle cx="7" cy="5" r="1"/>
+          <circle cx="7" cy="12" r="1"/>
+          <circle cx="7" cy="19" r="1"/>
+        </svg>
+      ),
       patientCalendar: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>

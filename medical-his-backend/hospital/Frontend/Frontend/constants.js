@@ -13,7 +13,9 @@ import ReportsPage from "./src/pages/ReportsPage";
 import PatientFreeDoctorsPage from "./src/pages/PatientFreeDoctorsPage";
 import PatientAdmissionRecordsPage from "./src/pages/PatientAdmissionRecordsPage";
 import PatientMyCasesPage from "./src/pages/PatientMyCasesPage";
+import KnowledgeFilesPage from "./src/pages/KnowledgeFilesPage";
 import AIAssistantPage from "./src/pages/AIAssistantPage.jsx";
+import AuditLogsPage from "./src/pages/AuditLogsPage.jsx";
 
 /** 管理员侧栏（与原先一致） */
 export const ADMIN_NAV_ITEMS = [
@@ -29,6 +31,8 @@ export const ADMIN_NAV_ITEMS = [
   { id: "manageDoctors", label: "医生管理", icon: "manageDoctors" },
   { id: "appointments", label: "预约挂号", icon: "appointments" },
   { id: "reports", label: "统计报表", icon: "reports" },
+  { id: "knowledgeFiles", label: "文件管理", icon: "knowledgeFiles" },
+  { id: "auditLogs", label: "日志查看", icon: "auditLogs" },
   { id: "aiAssistant", label: "管理小助手", icon: "aiAssistant" },
 ];
 
@@ -51,7 +55,15 @@ export function isPatientRole(role) {
 }
 
 export function getNavItemsForRole(role) {
-  return isPatientRole(role) ? PATIENT_NAV_ITEMS : ADMIN_NAV_ITEMS;
+  const r = String(role ?? "").toUpperCase();
+  if (r === "PATIENT") {
+    return PATIENT_NAV_ITEMS;
+  }
+  if (r === "ADMIN") {
+    return ADMIN_NAV_ITEMS;
+  }
+  // 医生等非 ADMIN：沿用医护菜单但隐藏 ADMIN 专属入口
+  return ADMIN_NAV_ITEMS.filter((item) => item.id !== "knowledgeFiles" && item.id !== "auditLogs");
 }
 
 export function getDefaultActiveId(role) {
@@ -87,5 +99,7 @@ export const PAGES = {
   patientFreeDoctors: PatientFreeDoctorsPage,
   patientAdmissionRecords: PatientAdmissionRecordsPage,
   patientMyCases: PatientMyCasesPage,
+  knowledgeFiles: KnowledgeFilesPage,
+  auditLogs: AuditLogsPage,
   aiAssistant: AIAssistantPage,
 };
