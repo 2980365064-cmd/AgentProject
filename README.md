@@ -15,10 +15,6 @@ AgentProject 是一套**前后端分离 + AI 智能服务**的综合医疗管理
 | `docker-compose.yml` | 本地一键启动：Elasticsearch、Redis、Kafka（KRaft 单节点）、MinIO |
 | `elasticsearch-analysis-ik-8.12.2.zip` | IK 插件包，供 ES 镜像构建使用（勿将含密钥的环境提交入库） |
 
-子模块说明：
-
-- [medical-his-backend/hospital/backend/README.md](medical-his-backend/hospital/backend/README.md) — 后端 API
-- [medical-his-backend/hospital/Frontend/README.md](medical-his-backend/hospital/Frontend/README.md) — 前端
 
 ## 项目架构
 
