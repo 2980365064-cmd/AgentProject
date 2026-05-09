@@ -21,7 +21,7 @@ AgentProject 是一套**前后端分离 + AI 智能服务**的综合医疗管理
 ### 1. medical-ai-gateway（Python AI 智能网关）
 
 - **语言**: Python 3.9+
-- **核心**: LangChain 生态、FastAPI（`medical-ai-gateway/agentApi`）、可选 Streamlit（`app.py`）
+- **核心**: LangChain 生态、FastAPI（`medical-ai-gateway/agentApi`）
 - **能力**: ReAct 对话、RAG 知识问答、危急症状拦截、SSE 流式输出、Redis 会话与历史、多模型降级（见 `config/agent.yaml` 等）
 
 ### 2. medical-his-backend/hospital/backend（Java HMS）
