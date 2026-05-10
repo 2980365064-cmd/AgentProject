@@ -279,3 +279,40 @@ export async function authFetch(input, init = {}) {
     throw error;
   }
 }
+
+/**
+ * 简化受保护 API 调用：请求 + 统一响应处理
+ */
+export async function requestJson(url, operationName, init = {}) {
+  const response = await authFetch(url, init);
+  return handleApiResponse(response, operationName);
+}
+
+/**
+ * 生成标准 CRUD service（getAll/create/update/delete）
+ */
+export function createCrudService({
+  baseUrl,
+  getAllMessage,
+  createMessage,
+  updateMessage,
+  deleteMessage,
+}) {
+  return {
+    getAll: async () => requestJson(baseUrl, getAllMessage),
+    create: async (data) =>
+      requestJson(baseUrl, createMessage, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: async (id, data) =>
+      requestJson(`${baseUrl}/${id}`, updateMessage, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    delete: async (id) =>
+      requestJson(`${baseUrl}/${id}`, deleteMessage, {
+        method: "DELETE",
+      }),
+  };
+}

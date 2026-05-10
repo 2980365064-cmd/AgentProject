@@ -29,3 +29,7 @@ separators: ["\n\n", "\n", "。", "！", "？", "；", " "]
 data_path: data
 md5_hex_store: md5.text
 allow_knowledge_file_type: ["pdf", "txt"]
+
+# ====== 三级记忆：长期向量记忆 ======
+memory_index_name: agent_long_term_memory
+memory_top_k: 3

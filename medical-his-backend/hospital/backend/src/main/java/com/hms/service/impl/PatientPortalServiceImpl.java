@@ -55,6 +55,35 @@ public class PatientPortalServiceImpl implements PatientPortalService {
         return authRepository.findByEmail(email);
     }
 
+    /**
+     * 预约标识：
+     * - 已绑定 NIC：继续使用 NIC
+     * - 未绑定 NIC：使用账号级稳定标识，保证患者可直接预约（无需先入院/绑 NIC）
+     */
+    private String resolveAppointmentIdentity(User user) {
+        if (user.getNic() != null && !user.getNic().isBlank()) {
+            return user.getNic().trim();
+        }
+        if (user.getId() == null) {
+            throw new RuntimeException("当前用户身份无效，无法预约");
+        }
+        return "APPUSER-" + user.getId();
+    }
+
+    /**
+     * 管理员在未提供 NIC 时，使用患者姓名构造稳定预约标识。
+     */
+    private String resolveAdminAppointmentIdentity(User user, AppointmentRequest request) {
+        if (request.getPatientNic() != null && !request.getPatientNic().isBlank()) {
+            return request.getPatientNic().trim();
+        }
+        if (request.getPatientName() != null && !request.getPatientName().isBlank()) {
+            String normalizedName = request.getPatientName().trim().replaceAll("\\s+", "");
+            return "ADMINNAME-" + normalizedName;
+        }
+        return resolveAppointmentIdentity(user);
+    }
+
     @Override
     public Response<?> getAvailableDoctors(String date, String timeSlot) {
         List<Doctor> doctors = doctorRepository.findAll();
@@ -109,10 +138,8 @@ public class PatientPortalServiceImpl implements PatientPortalService {
     @Override
     public Response<?> getMyAppointment() {
         User user = getCurrentUser();
-        if (user.getNic() == null || user.getNic().isBlank()) {
-            return new Response<>("error", "请先绑定证件号(NIC)", null);
-        }
-        Optional<Appointment> opt = appointmentRepository.findByNic(user.getNic());
+        String identity = resolveAppointmentIdentity(user);
+        Optional<Appointment> opt = appointmentRepository.findByNic(identity);
         if (opt.isEmpty()) {
             return new Response<>("success", "暂无预约记录", null);
         }
@@ -126,18 +153,9 @@ public class PatientPortalServiceImpl implements PatientPortalService {
 
         final String effectiveNic;
         if (isAdmin) {
-            if (request.getPatientNic() != null && !request.getPatientNic().isBlank()) {
-                effectiveNic = request.getPatientNic().trim();
-            } else if (user.getNic() != null && !user.getNic().isBlank()) {
-                effectiveNic = user.getNic().trim();
-            } else {
-                return new Response<>("error", "管理员代预约请在请求中提供 patientNic（患者证件号），或先在管理员账号上绑定 NIC", null);
-            }
+            effectiveNic = resolveAdminAppointmentIdentity(user, request);
         } else {
-            if (user.getNic() == null || user.getNic().isBlank()) {
-                return new Response<>("error", "请先绑定证件号(NIC)", null);
-            }
-            effectiveNic = user.getNic().trim();
+            effectiveNic = resolveAppointmentIdentity(user);
         }
 
         if (request.getDoctorName() == null || request.getDoctorName().isBlank()) {
@@ -164,18 +182,6 @@ public class PatientPortalServiceImpl implements PatientPortalService {
             return new Response<>("error", "未找到该姓名的在职医生", null);
         }
 
-        Patient patient = patientRepository.findByNic(effectiveNic).orElse(null);
-        if (patient == null) {
-            return new Response<>("error", "医院档案中不存在该证件号的患者档案", null);
-        }
-
-        if (request.getPatientName() != null && !request.getPatientName().isBlank()) {
-            String want = request.getPatientName().trim();
-            if (patient.getName() != null && !patient.getName().equals(want)) {
-                return new Response<>("error", "患者姓名与医院档案不一致", null);
-            }
-        }
-
         List<Appointment> atSlot = appointmentRepository.findByDoctorAndDateAndTime(doctorName, localDate, time);
         for (Appointment a : atSlot) {
             if (!isActiveAppointment(a)) {
@@ -188,7 +194,15 @@ public class PatientPortalServiceImpl implements PatientPortalService {
 
         Appointment appt = new Appointment();
         appt.setNic(effectiveNic);
-        appt.setPatient(patient.getName());
+        String patientDisplayName;
+        if (request.getPatientName() != null && !request.getPatientName().isBlank()) {
+            patientDisplayName = request.getPatientName().trim();
+        } else if (user.getName() != null && !user.getName().isBlank()) {
+            patientDisplayName = user.getName().trim();
+        } else {
+            patientDisplayName = "未命名患者";
+        }
+        appt.setPatient(patientDisplayName);
         appt.setDoctor(doctorName);
         appt.setDate(localDate);
         appt.setTime(time);
@@ -203,11 +217,8 @@ public class PatientPortalServiceImpl implements PatientPortalService {
     @Override
     public Response<?> cancelMyAppointment() {
         User user = getCurrentUser();
-        if (user.getNic() == null || user.getNic().isBlank()) {
-            return new Response<>("error", "请先绑定证件号(NIC)", null);
-        }
         try {
-            appointmentService.cancelByNic(user.getNic());
+            appointmentService.cancelByNic(resolveAppointmentIdentity(user));
         } catch (RuntimeException e) {
             return new Response<>("error", e.getMessage(), null);
         }

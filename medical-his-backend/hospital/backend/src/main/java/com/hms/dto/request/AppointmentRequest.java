@@ -8,7 +8,7 @@ public class AppointmentRequest {
     private String patientName;
     private String appointmentDate;
     private String appointmentTime;
-    /** 管理员代预约时必填（与 Patient.nic 一致）；患者端调用应忽略，以登录用户 NIC 为准 */
+    /** 可选：传入时用于按真实患者证件号预约；不传也可预约 */
     private String patientNic;
     /** 可选，默认 Consultation */
     private String appointmentType;

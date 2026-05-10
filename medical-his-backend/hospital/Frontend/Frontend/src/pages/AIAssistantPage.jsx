@@ -305,6 +305,17 @@ const AIAssistantPage = ({ userRole }) => {
     }
   }, [inputMessage]);
 
+  // 发送后输入框会因 disabled 失焦；恢复可输入时自动回焦
+  useEffect(() => {
+    if (!isConnected || !currentSessionId || isLoading) {
+      return;
+    }
+    const t = setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [isConnected, currentSessionId, isLoading]);
+
   // 打开创建会话对话框
   const handleOpenCreateModal = () => {
     setNewSessionTitle('');

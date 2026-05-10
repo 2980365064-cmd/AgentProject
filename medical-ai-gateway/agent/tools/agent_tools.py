@@ -253,6 +253,64 @@ def get_all_doctor_info() -> str:
         logger.error(f"❌ 获取医生信息异常：{e}", exc_info=True)
         return f"查询失败: {str(e)}"
 
+
+def recommend_doctor_by_symptom(symptom_description: str) -> str:
+    """
+    根据症状推荐医生姓名（轻量规则版）。
+    返回医生姓名，失败返回空字符串。
+    """
+    try:
+        if not symptom_description or len(symptom_description.strip()) < 2:
+            return ""
+
+        url = f"{JAVA_BACKEND_URL}/api/v1/ai-assistant/allDoctors"
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return ""
+
+        data = response.json()
+        doctors = data.get("data", []) if isinstance(data, dict) else []
+        if not isinstance(doctors, list) or not doctors:
+            return ""
+
+        text = symptom_description.lower()
+        dept_rules = [
+            (("头疼", "头痛", "偏头痛", "眩晕"), ("神经内科", "neurology")),
+            (("胸闷", "胸痛", "心慌", "高血压"), ("心内科", "cardiology", "心血管")),
+            (("骨折", "扭伤", "关节痛", "腰痛", "背痛"), ("骨科", "orthopaedics", "orthopedics")),
+            (("咳嗽", "发烧", "咽痛"), ("内科", "internal medicine")),
+            (("腹痛", "胃痛", "反酸"), ("内科", "internal medicine")),
+        ]
+
+        preferred_tokens = ()
+        for symptom_tokens, dept_tokens in dept_rules:
+            if any(s in text for s in symptom_tokens):
+                preferred_tokens = dept_tokens
+                break
+
+        if preferred_tokens:
+            for doc in doctors:
+                if not isinstance(doc, dict):
+                    continue
+                spec = str(doc.get("specialisation", "")).lower()
+                ward = str(doc.get("ward", "")).lower()
+                team = str(doc.get("team", "")).lower()
+                if any(t.lower() in spec or t.lower() in ward or t.lower() in team for t in preferred_tokens):
+                    name = (doc.get("name") or "").strip()
+                    if name:
+                        return name
+
+        # 未命中科室规则时，回退第一个医生
+        for doc in doctors:
+            if isinstance(doc, dict):
+                name = (doc.get("name") or "").strip()
+                if name:
+                    return name
+        return ""
+    except Exception as e:
+        logger.warning(f"推荐医生失败，回退人工指定医生: {e}")
+        return ""
+
 @tool(description="根据患者输入的症状描述，提取关键症状信息并生成结构化总结，用于后续推荐合适的医生科室。当患者描述自己的不适、病情、症状时使用此工具。")
 def summarize_symptoms(patient_info: str) -> str:
     """
@@ -317,7 +375,7 @@ def summarize_symptoms(patient_info: str) -> str:
 @tool(
     description=(
         "一站式服务：症状→推荐医生→预约挂号。"
-        "管理员代预约时请尽量传入 patient_nic（患者证件号）；患者本人登录渠道可省略。"
+        "patient_nic 为可选字段，不传也可以完成预约。"
     )
 )
 def smart_recommend_and_book(
@@ -637,8 +695,7 @@ def filter_doctors_by_department(input_data: str) -> str:
 @tool(
     description=(
         "为患者预约挂号。需要：患者姓名、医生姓名、日期 YYYY-MM-DD、时间 HH:MM。"
-        "管理员代预约时必须同时传患者证件号 patient_nic（与医院档案 NIC 一致）；"
-        "患者本人通过 App 登录对话时可省略 patient_nic。"
+        "patient_nic 是可选字段，管理员和患者都无需依赖 NIC 才能预约。"
     )
 )
 def book_appointment(
@@ -656,7 +713,7 @@ def book_appointment(
         doctor_name: 医生姓名
         date: 预约日期，格式 YYYY-MM-DD
         time: 预约时间，格式 HH:MM
-        patient_nic: 患者 NIC；管理助手代预约时必填，健康助手可省略（用登录用户 NIC）
+        patient_nic: 可选字段；不传也可预约（传入时后端会优先按该标识处理）
         
     Returns:
         预约结果的字符串描述

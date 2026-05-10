@@ -14,6 +14,8 @@ from pathlib import Path
 from datetime import datetime
 
 from agent.react_agent import ReactAgent
+from intent_manager import initialize_intent_library
+from memory.session_memory import get_session_memory_manager
 from model.factory import chat_model
 from utils.redis_chat_history import get_messages, clear_session, get_redis_client, session_exists
 from utils.config_handler import redis_conf
@@ -37,6 +39,7 @@ app = FastAPI(
 
 # 初始化Agent实例（全局单例）
 agent = ReactAgent()
+session_memory_manager = get_session_memory_manager()
 
 # ✅ 初始化向量知识库服务
 vector_store_service = VectorStoreService()
@@ -58,6 +61,11 @@ async def startup_event():
         logger.info(f"✅ 向量知识库初始化完成，当前文档总数: {new_count}")
     except Exception as e:
         logger.error(f"❌ 向量知识库初始化失败: {e}", exc_info=True)
+    try:
+        initialize_intent_library()
+        logger.info("✅ 意图向量库初始化完成")
+    except Exception as e:
+        logger.error(f"❌ 意图向量库初始化失败: {e}", exc_info=True)
 
 
 class ChatRequest(BaseModel):
@@ -347,6 +355,7 @@ async def delete_session(session_id: str, user_id: Optional[str] = None, assista
     try:
         r = get_redis_client()
         prefix = redis_conf.get("key_prefix", "agent:chat:")
+        profile_for_finalize = assistant_profile or "health"
         
         deleted = False
         
@@ -354,12 +363,32 @@ async def delete_session(session_id: str, user_id: Optional[str] = None, assista
         if assistant_profile and user_id:
             key = f"{prefix}{assistant_profile}:{user_id}:{session_id}"
             if r.exists(key):
+                # 在删除会话前做最终摘要，写入长期记忆（第三层）
+                session_memory_manager.finalize_session(
+                    session_id=session_id,
+                    assistant_profile=profile_for_finalize,
+                    user_id=user_id,
+                    reason="delete_session",
+                )
                 r.delete(key)
                 deleted = True
                 logger.info(f"成功删除会话: {key}")
         else:
             # 扫描所有可能的 key 并删除
             for key in r.scan_iter(match=f"{prefix}*:{session_id}", count=10):
+                # 尽量从 key 中恢复 profile/user_id，保证摘要归档维度准确
+                parsed_profile = profile_for_finalize
+                parsed_user_id = user_id
+                parts = key.split(":")
+                if len(parts) >= 5:
+                    parsed_profile = parts[-3] or parsed_profile
+                    parsed_user_id = parts[-2] or parsed_user_id
+                session_memory_manager.finalize_session(
+                    session_id=session_id,
+                    assistant_profile=parsed_profile,
+                    user_id=parsed_user_id,
+                    reason="delete_session",
+                )
                 r.delete(key)
                 deleted = True
                 logger.info(f"成功删除会话: {key}")
@@ -435,6 +464,14 @@ async def chat(request: ChatRequest):
                 "为了您的健康安全，请不要仅依赖在线咨询服务，务必寻求专业医疗帮助。\n\n"
                 "如果您有其他非紧急的健康问题，我很乐意为您提供帮助。"
             )
+            # 危急拦截也要进入短期记忆，避免“这轮对话凭空消失”。
+            session_memory_manager.append_turn(
+                session_id=session_id,
+                assistant_profile=assistant_profile,
+                user_id=user_id,
+                user_text=user_input,
+                assistant_text=emergency_response,
+            )
             
             chat_data = ChatData(response=emergency_response, session_id=session_id)
             return ApiResult.success(data=chat_data, message="问答成功")
@@ -450,6 +487,13 @@ async def chat(request: ChatRequest):
                 "3. **寻求专业帮助**：这些症状需要专业医护人员进行评估\n\n"
                 "在线健康咨询无法替代面对面的医疗诊断。请务必重视您的健康状况，及时就医。\n\n"
                 "如有其他健康问题，我会继续为您提供支持。"
+            )
+            session_memory_manager.append_turn(
+                session_id=session_id,
+                assistant_profile=assistant_profile,
+                user_id=user_id,
+                user_text=user_input,
+                assistant_text=emergency_response,
             )
             
             chat_data = ChatData(response=emergency_response, session_id=session_id)
@@ -543,6 +587,13 @@ async def chat_stream(request: ChatRequest):
                     "为了您的健康安全，请不要仅依赖在线咨询服务，务必寻求专业医疗帮助。\n\n"
                     "如果您有其他非紧急的健康问题，我很乐意为您提供帮助。"
                 )
+                session_memory_manager.append_turn(
+                    session_id=session_id,
+                    assistant_profile=assistant_profile,
+                    user_id=user_id,
+                    user_text=user_input,
+                    assistant_text=emergency_response,
+                )
                 
                 words = emergency_response.split(' ')
                 for i in range(0, len(words), 3):
@@ -571,6 +622,13 @@ async def chat_stream(request: ChatRequest):
                     "3. **寻求专业帮助**：这些症状需要专业医护人员进行评估\n\n"
                     "在线健康咨询无法替代面对面的医疗诊断。请务必重视您的健康状况，及时就医。\n\n"
                     "如有其他健康问题，我会继续为您提供支持。"
+                )
+                session_memory_manager.append_turn(
+                    session_id=session_id,
+                    assistant_profile=assistant_profile,
+                    user_id=user_id,
+                    user_text=user_input,
+                    assistant_text=emergency_response,
                 )
                 
                 words = emergency_response.split(' ')

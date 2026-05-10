@@ -52,6 +52,13 @@ def _session_key(session_id: str, assistant_profile: Optional[str] = None, user_
         return f"{prefix}{session_id}"
 
 
+def build_session_key(session_id: str, assistant_profile: Optional[str] = None, user_id: Optional[str] = None) -> str:
+    """
+    对外暴露统一的会话 Key 生成方法，供其他模块复用，避免重复拼 key 造成不一致。
+    """
+    return _session_key(session_id, assistant_profile, user_id)
+
+
 def _trim(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cap = int(redis_conf.get("max_messages", 80))
     if cap <= 0 or len(messages) <= cap:
@@ -59,44 +66,97 @@ def _trim(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return messages[-cap:]
 
 
+def _normalize_session_record(raw: str) -> dict[str, Any]:
+    """
+    把 Redis 中历史格式（list 或 dict）统一转换为 dict 结构。
+
+    统一结构：
+    {
+      "title": str,
+      "messages": list[{"role":"user|assistant","content":"..."}],
+      "created_at": int,
+      "updated_at": int,
+      "assistant_profile": str|None,
+      "user_id": str|None,
+      "session_id": str|None,
+      ... 其他扩展字段（如 summary/user_profile）
+    }
+    """
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        out = dict(data)
+        if not isinstance(out.get("messages"), list):
+            out["messages"] = []
+        return out
+    if isinstance(data, list):
+        return {"title": "新对话", "messages": data}
+    return {"title": "新对话", "messages": []}
+
+
+def get_session_record(
+    session_id: str,
+    assistant_profile: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    读取完整会话记录（包含 messages + 扩展元数据）。
+    """
+    if not session_id:
+        return {"title": "新对话", "messages": []}
+    try:
+        r = get_redis_client()
+        key = _session_key(session_id, assistant_profile, user_id)
+        raw = r.get(key)
+        if not raw and (assistant_profile or user_id):
+            key = _session_key(session_id)
+            raw = r.get(key)
+        if not raw:
+            return {"title": "新对话", "messages": []}
+        record = _normalize_session_record(raw)
+        record.setdefault("title", "新对话")
+        record.setdefault("messages", [])
+        return record
+    except redis.RedisError as e:
+        logger.error(f"Redis 读取会话记录失败 session_id={session_id}: {e}")
+        return {"title": "新对话", "messages": []}
+
+
+def save_session_record(
+    session_id: str,
+    record: dict[str, Any],
+    assistant_profile: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> None:
+    """
+    按统一对象结构保存完整会话记录。
+    """
+    if not session_id:
+        return
+    try:
+        r = get_redis_client()
+        key = _session_key(session_id, assistant_profile, user_id)
+        ttl = int(redis_conf.get("ttl_seconds", 604800))
+        payload = json.dumps(record, ensure_ascii=False)
+        if ttl > 0:
+            r.setex(key, ttl, payload)
+        else:
+            r.set(key, payload)
+    except redis.RedisError as e:
+        logger.error(f"Redis 保存会话记录失败 session_id={session_id}: {e}")
+
+
 def get_messages(session_id: str, assistant_profile: Optional[str] = None, user_id: Optional[str] = None) -> list[dict[str, str]]:
     """读取会话历史，格式为 [{"role":"user"|"assistant","content":"..."}, ...]"""
     if not session_id:
         return []
     try:
-        r = get_redis_client()
-        
-        # ✅ 尝试新格式
-        key = _session_key(session_id, assistant_profile, user_id)
-        raw = r.get(key)
-        
-        # ✅ 如果新格式找不到，尝试旧格式
-        if not raw and (assistant_profile or user_id):
-            logger.info(f"新格式 Key 未找到数据，尝试旧格式: {session_id}")
-            key = _session_key(session_id)
-            raw = r.get(key)
-        
-        if not raw:
-            logger.warning(f"会话 {session_id} 在 Redis 中不存在")
-            return []
-        
-        data = json.loads(raw)
-
-        # 新格式：{"title": "...", "messages": [...]}；旧格式：直接为消息数组
-        if isinstance(data, dict):
-            msg_list = data.get("messages")
-            if not isinstance(msg_list, list):
-                return []
-        elif isinstance(data, list):
-            msg_list = data
-        else:
-            return []
-
+        record = get_session_record(session_id, assistant_profile, user_id)
+        msg_list = record.get("messages", [])
         out: list[dict[str, str]] = []
         for item in msg_list:
             if isinstance(item, dict) and item.get("role") in ("user", "assistant") and "content" in item:
                 out.append({"role": item["role"], "content": str(item["content"])})
-        
+        key = _session_key(session_id, assistant_profile, user_id)
         logger.info(f"✅ 从 Key={key} 读取到 {len(out)} 条消息")
         return out
     except redis.RedisError as e:
@@ -128,36 +188,11 @@ def save_messages(session_id: str, messages: list[dict[str, str]],
     if not session_id:
         return
     try:
-        r = get_redis_client()
         trimmed = _trim(messages)
-        ttl = int(redis_conf.get("ttl_seconds", 604800))
-        
-        # ✅ 使用新格式 Key
+        existing_data = get_session_record(session_id, assistant_profile, user_id)
+        existing_data["messages"] = trimmed
+        save_session_record(session_id, existing_data, assistant_profile, user_id)
         key = _session_key(session_id, assistant_profile, user_id)
-        
-        # ✅ 检查是否是新格式（包含title的对象）
-        raw = r.get(key)
-        if raw:
-            try:
-                existing_data = json.loads(raw)
-                if isinstance(existing_data, dict):
-                    # 新格式：更新 messages 字段，保留 title
-                    existing_data["messages"] = trimmed
-                    payload = json.dumps(existing_data, ensure_ascii=False)
-                else:
-                    # 旧格式：直接是数组
-                    payload = json.dumps(trimmed, ensure_ascii=False)
-            except:
-                payload = json.dumps(trimmed, ensure_ascii=False)
-        else:
-            # 新会话：直接存储数组
-            payload = json.dumps(trimmed, ensure_ascii=False)
-        
-        if ttl > 0:
-            r.setex(key, ttl, payload)
-        else:
-            r.set(key, payload)
-        
         logger.info(f"✅ 保存 {len(trimmed)} 条消息到 Key={key}")
     except redis.RedisError as e:
         logger.error(f"Redis 写入会话历史失败 session_id={session_id}: {e}")

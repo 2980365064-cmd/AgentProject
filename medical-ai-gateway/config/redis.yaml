@@ -4,5 +4,22 @@ db: 0
 # 空字符串表示无密码；也可在环境变量 REDIS_PASSWORD 中设置（见 redis_chat_history 客户端构建）
 password: ""
 key_prefix: "agent:chat:"
-ttl_seconds: 604800
-max_messages: 80
+ttl_seconds: 259200
+# 30轮（user+assistant）= 60 条消息
+max_messages: 60
+
+# 三级记忆 - 第二层（会话短期记忆）可配置项
+session_memory_rounds: 30
+session_memory_ttl_seconds: 259200
+
+# ====== 三级记忆配置 ======
+# 二层会话记忆：默认保留 30 轮、3 天
+session_max_rounds: 30
+session_ttl_seconds: 259200
+
+# 一层工作记忆：短周期、强时效状态（任务节点、临时参数等）
+working_memory_prefix: "agent:work:"
+working_ttl_seconds: 7200
+
+# 二层摘要触发
+summary_trigger_rounds: 30
