@@ -15,17 +15,13 @@ AgentProject 是一套**前后端分离 + AI 智能服务**的综合医疗管理
 | `docker-compose.yml` | 本地一键启动：Elasticsearch、Redis、Kafka（KRaft 单节点）、MinIO |
 | `elasticsearch-analysis-ik-8.12.2.zip` | IK 插件包，供 ES 镜像构建使用（勿将含密钥的环境提交入库） |
 
-子模块说明：
-
-- [medical-his-backend/hospital/backend/README.md](medical-his-backend/hospital/backend/README.md) — 后端 API
-- [medical-his-backend/hospital/Frontend/README.md](medical-his-backend/hospital/Frontend/README.md) — 前端
 
 ## 项目架构
 
 ### 1. medical-ai-gateway（Python AI 智能网关）
 
 - **语言**: Python 3.9+
-- **核心**: LangChain 生态、FastAPI（`medical-ai-gateway/agentApi`）、可选 Streamlit（`app.py`）
+- **核心**: LangChain 生态、FastAPI（`medical-ai-gateway/agentApi`）
 - **能力**: ReAct 对话、RAG 知识问答、危急症状拦截、SSE 流式输出、Redis 会话与历史、多模型降级（见 `config/agent.yaml` 等）
 
 ### 2. medical-his-backend/hospital/backend（Java HMS）
