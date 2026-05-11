@@ -32,7 +32,6 @@
 - 多轮复杂对话中的上下文丢失问题
 ---
 ## 2. 仓库结构
-```text
 AgentProject
 ├─ medical-his-backend/
 │  └─ hospital/
