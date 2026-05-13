@@ -10,6 +10,23 @@ from utils.config_handler import agent_conf
 from utils.logger_handler import logger
 from utils.path_tool import get_abs_path
 from model.factory import chat_model
+from agent.tools.tool_schemas import (
+    BookAppointmentInput,
+    FetchExternalDataInput,
+    FillContextForReportInput,
+    FilterDoctorsByDepartmentInput,
+    GetAllDoctorInfoInput,
+    GetCurrentMonthInput,
+    GetDoctorInfoInput,
+    GetPatientInfoInput,
+    GetUserIdInput,
+    GetUserLocationInput,
+    GetWeatherInput,
+    RagSummarizeInput,
+    RecommendHospitalInput,
+    SmartRecommendAndBookInput,
+    SummarizeSymptomsInput,
+)
 
 external_data = {}
 rag = RagSummarizationService()
@@ -21,7 +38,10 @@ current_bearer_token: contextvars.ContextVar[Optional[str]] = contextvars.Contex
 )
 
 
-@tool(description="通过医生姓名查询医生信息。**重要规则**：如果返回空字符串或'未找到'，说明该医生不存在于系统中，绝对不要编造任何医生信息，直接告知用户未找到该医生。")
+@tool(
+    args_schema=GetDoctorInfoInput,
+    description="通过医生姓名查询医生信息。**重要规则**：如果返回空字符串或'未找到'，说明该医生不存在于系统中，绝对不要编造任何医生信息，直接告知用户未找到该医生。",
+)
 def get_doctor_info(name: str) -> str:
     """
 
@@ -101,7 +121,10 @@ def get_doctor_info(name: str) -> str:
         return f"查询失败: {str(e)}"
 
 
-@tool(description="通过患者姓名查询患者信息。**重要规则**：如果返回空字符串或'未找到'，说明该患者不存在于系统中，绝对不要编造任何患者信息，直接告知用户未找到该患者。")
+@tool(
+    args_schema=GetPatientInfoInput,
+    description="通过患者姓名查询患者信息。**重要规则**：如果返回空字符串或'未找到'，说明该患者不存在于系统中，绝对不要编造任何患者信息，直接告知用户未找到该患者。",
+)
 def get_patient_info(name: str) -> str:
     """
 
@@ -181,7 +204,10 @@ def get_patient_info(name: str) -> str:
         return f"查询失败: {str(e)}"
 
 
-@tool(description="获取所有医生的信息，无需任何参数，直接返回所有医生的基本信息")
+@tool(
+    args_schema=GetAllDoctorInfoInput,
+    description="获取所有医生的信息，无需任何参数，直接返回所有医生的基本信息",
+)
 def get_all_doctor_info() -> str:
     """
     获取全院所有医生的基本信息
@@ -311,7 +337,10 @@ def recommend_doctor_by_symptom(symptom_description: str) -> str:
         logger.warning(f"推荐医生失败，回退人工指定医生: {e}")
         return ""
 
-@tool(description="根据患者输入的症状描述，提取关键症状信息并生成结构化总结，用于后续推荐合适的医生科室。当患者描述自己的不适、病情、症状时使用此工具。")
+@tool(
+    args_schema=SummarizeSymptomsInput,
+    description="根据患者输入的症状描述，提取关键症状信息并生成结构化总结，用于后续推荐合适的医生科室。当患者描述自己的不适、病情、症状时使用此工具。",
+)
 def summarize_symptoms(patient_info: str) -> str:
     """
     根据患者输入的症状信息，生成结构化总结
@@ -373,10 +402,11 @@ def summarize_symptoms(patient_info: str) -> str:
 
 
 @tool(
+    args_schema=SmartRecommendAndBookInput,
     description=(
         "一站式服务：症状→推荐医生→预约挂号。"
         "patient_nic 为可选字段，不传也可以完成预约。"
-    )
+    ),
 )
 def smart_recommend_and_book(
     symptom_description: str,
@@ -596,7 +626,10 @@ def smart_recommend_and_book(
 3. 如情况紧急，请直接前往医院急诊科
 """
 
-@tool(description="根据科室名称，从医生列表中筛选匹配的医生。输入格式：'科室名称|医生列表JSON'")
+@tool(
+    args_schema=FilterDoctorsByDepartmentInput,
+    description="根据科室名称，从医生列表中筛选匹配的医生。输入格式：'科室名称|医生列表JSON'",
+)
 def filter_doctors_by_department(input_data: str) -> str:
     """
     根据科室名称筛选医生
@@ -693,10 +726,11 @@ def filter_doctors_by_department(input_data: str) -> str:
 
 
 @tool(
+    args_schema=BookAppointmentInput,
     description=(
         "为患者预约挂号。需要：患者姓名、医生姓名、日期 YYYY-MM-DD、时间 HH:MM。"
         "patient_nic 是可选字段，管理员和患者都无需依赖 NIC 才能预约。"
-    )
+    ),
 )
 def book_appointment(
     patient_name: str,
@@ -836,12 +870,15 @@ def book_appointment(
         return f"预约失败: {str(e)}"
 
 
-@tool(description="【优先调用】从权威医学知识库检索专业参考资料。适用于：疾病症状查询、治疗方案咨询、用药指南、健康常识、医学术语解释等专业医学问题。调用后会返回基于最新医学文献的准确信息。示例：用户问'骨折怎么处理' → 调用此工具检索骨折相关知识")
+@tool(
+    args_schema=RagSummarizeInput,
+    description="【优先调用】从权威医学知识库检索专业参考资料。适用于：疾病症状查询、治疗方案咨询、用药指南、健康常识、医学术语解释等专业医学问题。调用后会返回基于最新医学文献的准确信息。示例：用户问'骨折怎么处理' → 调用此工具检索骨折相关知识",
+)
 def rag_summarize(query: str) -> str:
     return rag.rag_summarize(query)
 
 
-@tool(description="推荐医院")
+@tool(args_schema=RecommendHospitalInput, description="推荐医院")
 def recommend_hospital(location: str, department: str) -> str:
     """
         当需要为患者推荐附近医院时调用此工具。
@@ -852,22 +889,22 @@ def recommend_hospital(location: str, department: str) -> str:
     return f"推荐医院：{location}的{department}科室"
 
 
-@tool(description="天气服务")
+@tool(args_schema=GetWeatherInput, description="天气服务")
 def get_weather(location: str) -> str:
     return "晴，33度"
 
 
-@tool(description="获取用户所在城市名称")
+@tool(args_schema=GetUserLocationInput, description="获取用户所在城市名称")
 def get_user_location() -> str:
     return random.choice(["北京", "上海", "广州", "深圳"])
 
 
-@tool(description="获取用户ID")
+@tool(args_schema=GetUserIdInput, description="获取用户ID")
 def get_user_id() -> str:
     return "1004"
 
 
-@tool(description="获取当前月份")
+@tool(args_schema=GetCurrentMonthInput, description="获取当前月份")
 def get_current_month() -> str:
     return "2025-08"
 
@@ -910,7 +947,10 @@ def generate_external_data(user_id: str, month: str):
                 }
 
 
-@tool(description="从外部系统获取指定用户在指定月份使用记录，若未检索到，则返回空字符串")
+@tool(
+    args_schema=FetchExternalDataInput,
+    description="从外部系统获取指定用户在指定月份使用记录，若未检索到，则返回空字符串",
+)
 def fetch_external_data(user_id: str, month: str) -> str:
     generate_external_data(user_id, month)
     try:
@@ -920,6 +960,9 @@ def fetch_external_data(user_id: str, month: str) -> str:
         return ""
 
 
-@tool(description="无入参，无返回值，调用后触发中间件，填充报告所需要的上下文信息")
-def fill_context_for_report():
+@tool(
+    args_schema=FillContextForReportInput,
+    description="无入参，无返回值，调用后触发中间件，填充报告所需要的上下文信息",
+)
+def fill_context_for_report() -> str:
     return "fill_context_for_report已调用"
