@@ -36,6 +36,7 @@ class ResultCode:
     NOT_FOUND = 404                  # 资源不存在
     METHOD_NOT_ALLOWED = 405         # 请求方法不允许
     CONFLICT = 409                   # 资源冲突
+    TOO_MANY_REQUESTS = 429          # 请求过于频繁 / 系统繁忙
     INTERNAL_ERROR = 500             # 服务器内部错误
     ERROR = 500                      # 别名，兼容旧代码
     SERVICE_UNAVAILABLE = 503        # 服务不可用
@@ -339,13 +340,23 @@ class HealthData(BaseModel):
     service: str = Field(default="医疗AI智能问答系统", description="服务名称")
     version: str = Field(default="1.0.0", description="API版本号")
     redis: str = Field(default="unknown", description="Redis连接状态：connected/disconnected/error")
+    scheduler_enabled: bool = Field(default=False, description="是否启用定时健康检查")
+    scheduler_interval_seconds: int = Field(default=0, description="定时检查间隔（秒）")
+    scheduler_last_check_at: Optional[str] = Field(default=None, description="最近一次定时检查时间（ISO 8601）")
+    scheduler_last_status: str = Field(default="unknown", description="最近一次定时检查状态：healthy/unhealthy/unknown")
+    scheduler_last_error: Optional[str] = Field(default=None, description="最近一次定时检查错误信息（无异常时为空）")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "service": "医疗AI智能问答系统",
                 "version": "1.0.0",
-                "redis": "connected"
+                "redis": "connected",
+                "scheduler_enabled": True,
+                "scheduler_interval_seconds": 60,
+                "scheduler_last_check_at": "2026-05-14T09:30:00",
+                "scheduler_last_status": "healthy",
+                "scheduler_last_error": None
             }
         }
 

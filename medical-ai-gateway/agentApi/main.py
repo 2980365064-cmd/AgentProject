@@ -17,7 +17,14 @@ from agent.react_agent import ReactAgent
 from intent_manager import initialize_intent_library
 from memory.session_memory import get_session_memory_manager
 from model.factory import chat_model
-from utils.redis_chat_history import get_messages, clear_session, get_redis_client, session_exists
+from utils.redis_chat_history import (
+    SESSION_OL_VERSION,
+    get_messages,
+    clear_session,
+    get_redis_client,
+    session_exists,
+)
+from utils.chat_gate import acquire_chat_slot, release_chat_slot
 from utils.config_handler import redis_conf
 from utils.logger_handler import logger
 from agentApi.response import ApiResult, ChatData, SessionCreateData, SessionHistoryData, SessionListData, SessionListItem, MessageItem, HealthData, ResultCode
@@ -44,6 +51,76 @@ session_memory_manager = get_session_memory_manager()
 # ✅ 初始化向量知识库服务
 vector_store_service = VectorStoreService()
 
+# ==================== 定时健康检查配置 ====================
+HEALTH_CHECK_ENABLED = os.getenv("HEALTH_CHECK_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+
+
+def _get_health_check_interval_seconds() -> int:
+    raw_value = os.getenv("HEALTH_CHECK_INTERVAL_SECONDS", "60")
+    try:
+        return max(5, int(raw_value))
+    except (TypeError, ValueError):
+        logger.warning(
+            f"HEALTH_CHECK_INTERVAL_SECONDS 配置无效: {raw_value}，将使用默认值 60"
+        )
+        return 60
+
+
+HEALTH_CHECK_INTERVAL_SECONDS = _get_health_check_interval_seconds()
+health_check_task: Optional[asyncio.Task] = None
+health_check_stop_event: Optional[asyncio.Event] = None
+health_check_state = {
+    "last_check_at": None,
+    "last_status": "unknown",
+    "last_error": None,
+}
+
+
+def check_redis_status() -> tuple[str, Optional[str]]:
+    """统一 Redis 健康检查逻辑，供 API 与定时任务复用。"""
+    try:
+        redis_client = get_redis_client()
+        if redis_client.ping():
+            return "connected", None
+        return "disconnected", "Redis ping 返回 False"
+    except Exception as exc:
+        return "error", str(exc)
+
+
+def run_health_check_once(trigger: str = "scheduler") -> str:
+    """执行一次健康检查并更新状态缓存。"""
+    redis_status, redis_error = check_redis_status()
+    now = datetime.now().isoformat()
+    is_healthy = redis_status == "connected"
+    health_check_state["last_check_at"] = now
+    health_check_state["last_status"] = "healthy" if is_healthy else "unhealthy"
+    health_check_state["last_error"] = redis_error
+
+    if is_healthy:
+        logger.info(f"✅ [{trigger}] 健康检查通过，redis={redis_status}")
+    else:
+        logger.error(
+            f"❌ [{trigger}] 健康检查失败，redis={redis_status}, error={redis_error}"
+        )
+    return redis_status
+
+
+async def scheduled_health_check_loop(stop_event: asyncio.Event):
+    """后台循环执行定时健康检查。"""
+    logger.info(f"🩺 定时健康检查已启动，间隔 {HEALTH_CHECK_INTERVAL_SECONDS}s")
+    try:
+        while not stop_event.is_set():
+            await asyncio.to_thread(run_health_check_once, "scheduler")
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=HEALTH_CHECK_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                continue
+    except asyncio.CancelledError:
+        logger.info("🛑 定时健康检查任务收到取消信号")
+        raise
+    finally:
+        logger.info("🛑 定时健康检查任务已停止")
+
 @app.on_event("startup")
 async def startup_event():
     """应用启动时自动加载新文档到向量库"""
@@ -66,6 +143,34 @@ async def startup_event():
         logger.info("✅ 意图向量库初始化完成")
     except Exception as e:
         logger.error(f"❌ 意图向量库初始化失败: {e}", exc_info=True)
+
+    global health_check_task, health_check_stop_event
+    if HEALTH_CHECK_ENABLED:
+        health_check_stop_event = asyncio.Event()
+        # 启动时先执行一次，避免服务刚启动时状态为空
+        await asyncio.to_thread(run_health_check_once, "startup")
+        health_check_task = asyncio.create_task(
+            scheduled_health_check_loop(health_check_stop_event)
+        )
+    else:
+        logger.info("ℹ️ 定时健康检查已禁用（HEALTH_CHECK_ENABLED=false）")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global health_check_task, health_check_stop_event
+    if health_check_stop_event is not None:
+        health_check_stop_event.set()
+
+    if health_check_task is not None:
+        health_check_task.cancel()
+        try:
+            await health_check_task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            health_check_task = None
+            health_check_stop_event = None
 
 
 class ChatRequest(BaseModel):
@@ -132,14 +237,15 @@ async def health_check():
     
     统一返回格式：ApiResult<HealthData>
     """
-    try:
-        r = get_redis_client()
-        redis_status = "connected" if r.ping() else "disconnected"
-    except Exception as e:
-        logger.error(f"Redis健康检查失败: {str(e)}")
-        redis_status = "error"
-    
-    health_data = HealthData(redis=redis_status)
+    redis_status = await asyncio.to_thread(run_health_check_once, "api")
+    health_data = HealthData(
+        redis=redis_status,
+        scheduler_enabled=HEALTH_CHECK_ENABLED,
+        scheduler_interval_seconds=HEALTH_CHECK_INTERVAL_SECONDS if HEALTH_CHECK_ENABLED else 0,
+        scheduler_last_check_at=health_check_state["last_check_at"],
+        scheduler_last_status=health_check_state["last_status"],
+        scheduler_last_error=health_check_state["last_error"],
+    )
     return ApiResult.success(data=health_data, message="服务运行正常")
 
 
@@ -189,7 +295,8 @@ async def create_session(body: Union[SessionCreateBody, None] = None):
             "user_id": user_id,
             "user_role": user_role,
             "assistant_profile": assistant_profile,
-            "session_id": session_id  # 额外存储 session_id，方便查找
+            "session_id": session_id,  # 额外存储 session_id，方便查找
+            SESSION_OL_VERSION: 1,
         }
         
         ttl = int(redis_conf.get("ttl_seconds", 604800))
@@ -434,7 +541,8 @@ async def chat(request: ChatRequest):
                 "user_id": user_id,
                 "user_role": request.user_role,
                 "assistant_profile": assistant_profile,
-                "session_id": session_id
+                "session_id": session_id,
+                SESSION_OL_VERSION: 1,
             }
             
             ttl = int(redis_conf.get("ttl_seconds", 604800))
@@ -449,8 +557,16 @@ async def chat(request: ChatRequest):
     
     if not user_input or not user_input.strip():
         return ApiResult.error(message="用户输入不能为空", code=ResultCode.BAD_REQUEST)
-    
+
+    slot_acquired = False
     try:
+        allowed, retry_after = await acquire_chat_slot()
+        if not allowed:
+            return ApiResult.error(
+                message=f"系统繁忙，请约 {retry_after or 1} 秒后再试",
+                code=ResultCode.TOO_MANY_REQUESTS,
+            )
+        slot_acquired = True
         # ✅ 危急症状拦截
         if keyword_interceptor(user_input):
             logger.warning(f"会话 {session_id} 触发关键词拦截: {user_input[:50]}")
@@ -514,6 +630,9 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"会话 {session_id} 处理异常: {str(e)}", exc_info=True)
         return ApiResult.error(message=f"AI服务处理失败: {str(e)}", code=ResultCode.ERROR)
+    finally:
+        if slot_acquired:
+            release_chat_slot()
 
 
 @app.post(f"{BASE_PATH}/chat/stream", summary="发送消息进行智能问答（SSE流式返回）", tags=["Chat"])
@@ -555,7 +674,8 @@ async def chat_stream(request: ChatRequest):
                 "user_id": user_id,
                 "user_role": request.user_role,
                 "assistant_profile": assistant_profile,
-                "session_id": session_id
+                "session_id": session_id,
+                SESSION_OL_VERSION: 1,
             }
             
             ttl = int(redis_conf.get("ttl_seconds", 604800))
@@ -574,6 +694,16 @@ async def chat_stream(request: ChatRequest):
     
     async def event_generator():
         """SSE 事件生成器"""
+        allowed, retry_after = await acquire_chat_slot()
+        if not allowed:
+            err = {
+                "error": "系统繁忙，请稍后再试",
+                "retry_after": retry_after,
+                "code": ResultCode.TOO_MANY_REQUESTS,
+            }
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+            return
+
         try:
             if keyword_interceptor(user_input):
                 logger.warning(f"会话 {session_id} 触发关键词拦截: {user_input[:50]}")
@@ -669,6 +799,8 @@ async def chat_stream(request: ChatRequest):
             logger.error(f"会话 {session_id} 流式处理异常: {str(e)}", exc_info=True)
             error_data = json.dumps({"error": f"AI服务处理失败: {str(e)}"}, ensure_ascii=False)
             yield f"data: {error_data}\n\n"
+        finally:
+            release_chat_slot()
     
     return StreamingResponse(
         event_generator(),
